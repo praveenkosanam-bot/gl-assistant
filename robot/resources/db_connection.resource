@@ -1,7 +1,15 @@
+*** Settings ***
+Library    DatabaseLibrary
+
 *** Variables ***
-${DB NAME}      YOUR_DB_ALIAS
-${DB USER}      glcai_user
-${DB PASSWORD}  secret
-${DB HOST}      localhost
-${DB PORT}      1521
-${DB SERVICE}   XEPDB1
+${DB_MODULE}    oracledb
+${DB_NAME}      splashgl001
+${DB_USER}      XXSBID_605
+${DB_PASSWORD}  XXSBID_605
+${DB_HOST}      192.168.8.127
+${DB_PORT}      1521
+
+*** Keywords ***
+Connect To Oracle
+    Connect To Database    ${DB_MODULE}    db_name=${DB_NAME}    db_user=${DB_USER}
+    ...    db_password=${DB_PASSWORD}    db_host=${DB_HOST}    db_port=${DB_PORT}
