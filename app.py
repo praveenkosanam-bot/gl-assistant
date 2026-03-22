@@ -672,47 +672,53 @@ Rules:
 
     session = requests.Session()
     session.trust_env = False
-    response = session.post(
-        OPENAI_RESPONSES_URL,
-        headers={
-            "Authorization": f"Bearer {OPENAI_API_KEY}",
-            "Content-Type": "application/json",
-        },
-        json={
-            "model": OPENAI_MODEL,
-            "instructions": SYSTEM_PROMPT,
-            "input": [
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "input_text",
-                            "text": prompt,
-                        }
-                    ],
-                }
-            ],
-        },
-        timeout=60,
-    )
-    response.raise_for_status()
-    payload = response.json()
-    text = extract_output_text(payload)
-    if not text:
-        raise RuntimeError("OpenAI response did not contain routing output.")
     try:
-        routed = json.loads(text)
-    except json.JSONDecodeError:
-        match = re.search(r"\{.*\}", text, re.DOTALL)
-        if not match:
-            raise RuntimeError(f"OpenAI route output was not valid JSON: {text}")
-        routed = json.loads(match.group(0))
+        response = session.post(
+            OPENAI_RESPONSES_URL,
+            headers={
+                "Authorization": f"Bearer {OPENAI_API_KEY}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": OPENAI_MODEL,
+                "instructions": SYSTEM_PROMPT,
+                "input": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "input_text",
+                                "text": prompt,
+                            }
+                        ],
+                    }
+                ],
+            },
+            timeout=60,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        text = extract_output_text(payload)
+        if not text:
+            raise RuntimeError("OpenAI response did not contain routing output.")
+        try:
+            routed = json.loads(text)
+        except json.JSONDecodeError:
+            match = re.search(r"\{.*\}", text, re.DOTALL)
+            if not match:
+                raise RuntimeError(f"OpenAI route output was not valid JSON: {text}")
+            routed = json.loads(match.group(0))
 
-    if routed.get("api_path") not in SUPPORTED_API_PATHS | {"/api/db/none", "/api/db/unsupported"}:
-        raise RuntimeError(f"OpenAI returned unsupported api path: {routed.get('api_path')}")
+        if routed.get("api_path") not in SUPPORTED_API_PATHS | {"/api/db/none", "/api/db/unsupported"}:
+            raise RuntimeError(f"OpenAI returned unsupported api path: {routed.get('api_path')}")
 
-    routed["params"] = complete_lookup_params(question, routed.get("params") or {})
-    return routed
+        routed["params"] = complete_lookup_params(question, routed.get("params") or {})
+        routed["routing_mode"] = "openai"
+        return routed
+    except (requests.RequestException, RuntimeError, json.JSONDecodeError):
+        routed = resolve_question_rule_based(question)
+        routed["routing_mode"] = "rule_based_fallback"
+        return routed
 
 
 def dispatch_db_api(api_path: str, params: dict[str, Any]) -> dict[str, Any]:
