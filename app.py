@@ -22,7 +22,10 @@ def load_dotenv(path: str = ".env") -> None:
             if not line or line.startswith("#") or "=" not in line:
                 continue
             key, value = line.split("=", 1)
-            os.environ.setdefault(key.strip(), value.strip())
+            cleaned = value.strip()
+            if len(cleaned) >= 2 and cleaned[0] == cleaned[-1] and cleaned[0] in {'"', "'"}:
+                cleaned = cleaned[1:-1]
+            os.environ.setdefault(key.strip(), cleaned)
 
 
 load_dotenv()
@@ -667,7 +670,9 @@ Rules:
 - Default actual_flag to A when omitted.
 """
 
-    response = requests.post(
+    session = requests.Session()
+    session.trust_env = False
+    response = session.post(
         OPENAI_RESPONSES_URL,
         headers={
             "Authorization": f"Bearer {OPENAI_API_KEY}",
