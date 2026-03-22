@@ -37,6 +37,7 @@ OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses"
 DEFAULT_LEDGER_NAME = os.getenv("DEFAULT_LEDGER_NAME", "US Primary Ledger")
 DEFAULT_LEDGER_ID = int(os.getenv("DEFAULT_LEDGER_ID", "300000046975971"))
+DEFAULT_CURRENCY_SYMBOL = os.getenv("DEFAULT_CURRENCY_SYMBOL", "$")
 
 DB_CONFIG = {
     "user": os.getenv("DB_USER", "XXSBID_605"),
@@ -442,6 +443,41 @@ def get_account_for_ccid(ccid: int) -> str | None:
         {"ccid": ccid},
     )
     return row[0] if row else None
+
+
+def get_ledger_name(ledger_id: int | None) -> str | None:
+    if ledger_id is None:
+        return None
+    if ledger_id == DEFAULT_LEDGER_ID:
+        return DEFAULT_LEDGER_NAME
+    row = query_one(
+        """
+        SELECT name
+          FROM gl_ledgers
+         WHERE ledger_id = :ledger_id
+        """,
+        {"ledger_id": ledger_id},
+    )
+    return row[0] if row else str(ledger_id)
+
+
+def format_currency(amount: Any, currency_symbol: str = DEFAULT_CURRENCY_SYMBOL) -> str:
+    if amount is None:
+        return "N/A"
+    value = float(amount)
+    formatted = f"{abs(value):,.2f}"
+    if value < 0:
+        return f"-{currency_symbol}{formatted}"
+    return f"{currency_symbol}{formatted}"
+
+
+def annotate_ledger_metadata(result: dict[str, Any]) -> dict[str, Any]:
+    ledger_id = result.get("ledger_id")
+    if ledger_id is None:
+        return result
+    enriched = dict(result)
+    enriched["ledger_name"] = get_ledger_name(ledger_id)
+    return enriched
 
 
 def db_balance_by_ccid(params: dict[str, Any]) -> dict[str, Any]:
@@ -922,19 +958,19 @@ Rules:
 
 def dispatch_db_api(api_path: str, params: dict[str, Any]) -> dict[str, Any]:
     if api_path == "/api/db/balance/by-ccid":
-        return db_balance_by_ccid(params)
+        return annotate_ledger_metadata(db_balance_by_ccid(params))
     if api_path == "/api/db/balance/by-account":
-        return db_balance_by_account(params)
+        return annotate_ledger_metadata(db_balance_by_account(params))
     if api_path == "/api/db/balance/diff":
-        return db_balance_diff(params)
+        return annotate_ledger_metadata(db_balance_diff(params))
     if api_path == "/api/db/balance/trend":
-        return db_balance_trend(params)
+        return annotate_ledger_metadata(db_balance_trend(params))
     if api_path == "/api/db/balance/explain":
-        return db_balance_explain(params)
+        return annotate_ledger_metadata(db_balance_explain(params))
     if api_path == "/api/db/balance/highlights":
-        return db_balance_highlights(params)
+        return annotate_ledger_metadata(db_balance_highlights(params))
     if api_path == "/api/db/balance/diagnostics":
-        return db_balance_diagnostics(params)
+        return annotate_ledger_metadata(db_balance_diagnostics(params))
     if api_path == "/api/db/none":
         return {"message": "This question does not require a database query."}
     if api_path == "/api/db/unsupported":
@@ -943,33 +979,34 @@ def dispatch_db_api(api_path: str, params: dict[str, Any]) -> dict[str, Any]:
 
 
 def format_chat_reply(api_path: str, result: dict[str, Any]) -> str:
+    ledger_label = result.get("ledger_name") or (get_ledger_name(result.get("ledger_id")) if "ledger_id" in result else None)
     if api_path == "/api/db/balance/by-account":
         return (
-            f"Account {result['account_number']} in ledger {result['ledger_id']} for {result['period_name']} "
-            f"has YTD balance {result['ytd_balance']} and period activity {result['period_activity']}."
+            f"Account {result['account_number']} in {ledger_label} for {result['period_name']} "
+            f"has YTD balance {format_currency(result['ytd_balance'])} and period activity {format_currency(result['period_activity'])}."
         )
     if api_path == "/api/db/balance/by-ccid":
         return (
-            f"CCID {result['ccid']} in ledger {result['ledger_id']} for {result['period_name']} "
-            f"has YTD balance {result['ytd_balance']} and period activity {result['period_activity']}."
+            f"CCID {result['ccid']} in {ledger_label} for {result['period_name']} "
+            f"has YTD balance {format_currency(result['ytd_balance'])} and period activity {format_currency(result['period_activity'])}."
         )
     if api_path == "/api/db/balance/diff":
         identifier = f"account {result['account_number']}" if result.get("account_number") else f"CCID {result['ccid']}"
         return (
-            f"For {identifier}, YTD changed by {result['ytd_delta']} between {result['period_from']} and {result['period_to']}. "
-            f"Period activity changed by {result['period_activity_delta']}."
+            f"For {identifier}, YTD changed by {format_currency(result['ytd_delta'])} between {result['period_from']} and {result['period_to']}. "
+            f"Period activity changed by {format_currency(result['period_activity_delta'])}."
         )
     if api_path == "/api/db/balance/trend":
-        parts = [f"{item['period_name']}: {item['ytd_balance']}" for item in result["periods"]]
+        parts = [f"{item['period_name']}: {format_currency(item['ytd_balance'])}" for item in result["periods"]]
         return "Trend: " + "; ".join(parts)
     if api_path == "/api/db/balance/explain":
         return (
-            f"YTD {result['ytd_balance']} = begin DR {result['begin_balance_dr']} - begin CR {result['begin_balance_cr']} "
-            f"+ period DR {result['period_net_dr']} - period CR {result['period_net_cr']}."
+            f"YTD {format_currency(result['ytd_balance'])} = begin DR {format_currency(result['begin_balance_dr'])} - begin CR {format_currency(result['begin_balance_cr'])} "
+            f"+ period DR {format_currency(result['period_net_dr'])} - period CR {format_currency(result['period_net_cr'])}."
         )
     if api_path == "/api/db/balance/highlights":
         highlights = ", ".join(
-            f"{item['account_number']} ({item['ytd_balance']})" for item in result.get("top_accounts", [])
+            f"{item['account_number']} ({format_currency(item['ytd_balance'])})" for item in result.get("top_accounts", [])
         )
         return f"Top balance accounts for {result['period_name']}: {highlights}"
     if api_path == "/api/db/balance/diagnostics":

@@ -139,5 +139,33 @@ class ParsingDefaultsTests(unittest.TestCase):
         self.assertEqual(completed["account_number"], "12300")
 
 
+class ReplyFormattingTests(unittest.TestCase):
+    def test_format_chat_reply_uses_ledger_name_and_currency_format(self):
+        app_module = import_app_module()
+        result = {
+            "account_number": "12300",
+            "ledger_id": app_module.DEFAULT_LEDGER_ID,
+            "period_name": "01-23",
+            "ytd_balance": -66203032.72,
+            "period_activity": -53845.52,
+        }
+        reply = app_module.format_chat_reply("/api/db/balance/by-account", result)
+        self.assertEqual(
+            reply,
+            "Account 12300 in US Primary Ledger for 01-23 has YTD balance -$66,203,032.72 and period activity -$53,845.52.",
+        )
+
+    def test_format_currency_handles_positive_and_missing_values(self):
+        app_module = import_app_module()
+        self.assertEqual(app_module.format_currency(1234.5), "$1,234.50")
+        self.assertEqual(app_module.format_currency(None), "N/A")
+
+    def test_annotate_ledger_metadata_adds_ledger_name(self):
+        app_module = import_app_module()
+        enriched = app_module.annotate_ledger_metadata({"ledger_id": app_module.DEFAULT_LEDGER_ID, "period_name": "01-23"})
+        self.assertEqual(enriched["ledger_name"], "US Primary Ledger")
+        self.assertEqual(enriched["ledger_id"], app_module.DEFAULT_LEDGER_ID)
+
+
 if __name__ == "__main__":
     unittest.main()
