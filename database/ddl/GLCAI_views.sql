@@ -1,0 +1,2 @@
+-- Optional views for GLCAI reporting.
+-- Empty by default. Add view definitions as needed.

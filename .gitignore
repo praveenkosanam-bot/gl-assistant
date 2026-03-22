@@ -1,0 +1,14 @@
+# Oracle temp & logs
+*.log
+*.lst
+*.dmp
+
+# Robot outputs
+/results/
+*.xml
+*.report.html
+*.log.html
+
+# OS cruft
+.DS_Store
+Thumbs.db
