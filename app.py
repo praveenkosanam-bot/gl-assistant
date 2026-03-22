@@ -2,10 +2,12 @@ import json
 import os
 import re
 import time
+from pathlib import Path
 from typing import Any
 
 import oracledb
 import requests
+import yaml
 from flask import Flask, jsonify, render_template, request
 
 
@@ -46,6 +48,8 @@ DB_POOL_MIN = int(os.getenv("DB_POOL_MIN", "1"))
 DB_POOL_MAX = int(os.getenv("DB_POOL_MAX", "4"))
 DB_POOL_INCREMENT = int(os.getenv("DB_POOL_INCREMENT", "1"))
 MOCK_OPENAI = os.getenv("MOCK_OPENAI", "").lower() in {"1", "true", "yes"}
+RASA_URL = os.getenv("RASA_URL", "").rstrip("/")
+QUESTION_INVENTORY_PATH = Path(os.getenv("QUESTION_INVENTORY_PATH", "robot/tests/glcai_questions.yaml"))
 
 SYSTEM_PROMPT = """You are GL Assistant, a concise finance support assistant for Oracle GL balances.
 
@@ -89,6 +93,20 @@ SUPPORTED_API_PATHS = {
     "/api/db/balance/explain",
     "/api/db/balance/highlights",
     "/api/db/balance/diagnostics",
+}
+INTENT_API_MAP = {
+    "balance.lookup.ccid.period": "/api/db/balance/by-ccid",
+    "balance.lookup.ccid.ytd": "/api/db/balance/by-ccid",
+    "balance.lookup.segments.period": "/api/db/balance/by-account",
+    "balance.diff.two_periods": "/api/db/balance/diff",
+    "balance.trend.last_n": "/api/db/balance/trend",
+    "balance.type.override": "/api/db/balance/by-account",
+    "balance.currency.override": "/api/db/balance/by-ccid",
+    "balance.why_null_or_zero": "/api/db/balance/diagnostics",
+    "balance.explain.calculation": "/api/db/balance/explain",
+    "balance.high_level": "/api/db/balance/highlights",
+    "journals.lookup.basic": "/api/db/unsupported",
+    "journals.summary.by_source": "/api/db/unsupported",
 }
 
 
@@ -194,6 +212,103 @@ def query_all(sql: str, params: dict[str, Any] | None = None):
         with conn.cursor() as cursor:
             cursor.execute(sql, params or {})
             return cursor.fetchall()
+
+
+def load_question_inventory() -> list[dict[str, Any]]:
+    if not QUESTION_INVENTORY_PATH.exists():
+        return []
+    data = yaml.safe_load(QUESTION_INVENTORY_PATH.read_text(encoding="utf-8")) or {}
+    return data.get("intents", [])
+
+
+QUESTION_INVENTORY = load_question_inventory()
+
+
+def tokenize(text: str) -> set[str]:
+    return {token for token in re.findall(r"[a-z0-9]+", text.lower()) if len(token) > 1}
+
+
+def parse_question_local(question: str) -> dict[str, Any]:
+    entities = extract_filters(question)
+    question_tokens = tokenize(question)
+    best_intent = None
+    best_score = 0.0
+
+    for intent in QUESTION_INVENTORY:
+        score = 0.0
+        description_tokens = tokenize(intent.get("description", ""))
+        utterance_scores = []
+        for utterance in intent.get("utterances", []):
+            utterance_tokens = tokenize(utterance)
+            if utterance_tokens:
+                utterance_scores.append(len(question_tokens & utterance_tokens) / len(utterance_tokens))
+        if utterance_scores:
+            score += max(utterance_scores) * 0.75
+        if description_tokens:
+            score += (len(question_tokens & description_tokens) / len(description_tokens)) * 0.25
+
+        entity_names = set(intent.get("entities", []))
+        entity_bonus = len(entity_names & set(entities.keys())) * 0.08
+        score += entity_bonus
+
+        if "ccid" in entity_names and entities.get("ccid") is not None:
+            score += 0.2
+        if "account" in entity_names and entities.get("account_number") is not None:
+            score += 0.2
+        if "period_from" in entity_names and entities.get("period_from") is not None:
+            score += 0.2
+        if intent["name"].startswith("journals.") and "journal" in question.lower():
+            score += 0.25
+
+        if score > best_score:
+            best_score = score
+            best_intent = intent["name"]
+
+    if not best_intent:
+        best_intent = "balance.high_level" if any(token in question.lower() for token in BALANCE_KEYWORDS) else "balance.high_level"
+
+    return {
+        "intent": best_intent,
+        "confidence": round(best_score, 4),
+        "entities": entities,
+        "source": "lightweight",
+    }
+
+
+def parse_question_with_rasa(question: str) -> dict[str, Any] | None:
+    if not RASA_URL:
+        return None
+    session = requests.Session()
+    session.trust_env = False
+    response = session.post(f"{RASA_URL}/model/parse", json={"text": question}, timeout=10)
+    response.raise_for_status()
+    payload = response.json()
+    entities = extract_filters(question)
+    for entity in payload.get("entities", []):
+        name = entity.get("entity")
+        value = entity.get("value")
+        if name in {"ledger_id", "ccid", "n"} and value is not None:
+            try:
+                entities[name] = int(value)
+            except (TypeError, ValueError):
+                entities[name] = value
+        elif name == "account":
+            entities["account_number"] = str(value)
+        elif name == "period":
+            entities["period_name"] = str(value).upper()
+        elif name == "period_from":
+            entities["period_from"] = str(value).upper()
+        elif name == "period_to":
+            entities["period_to"] = str(value).upper()
+        elif name and value is not None:
+            entities[name] = value
+
+    return {
+        "intent": (payload.get("intent") or {}).get("name"),
+        "confidence": (payload.get("intent") or {}).get("confidence", 0.0),
+        "entities": entities,
+        "source": "rasa",
+    }
 
 
 def seed_lookup(
@@ -585,6 +700,30 @@ def extract_output_text(payload: dict[str, Any]) -> str:
 
 
 def resolve_question_rule_based(question: str) -> dict[str, Any]:
+    parsed = parse_question_local(question)
+    params = complete_lookup_params(question, parsed["entities"])
+    api_path = INTENT_API_MAP.get(parsed["intent"], "/api/db/balance/highlights")
+    lower_question = question.lower()
+
+    if "how do i call" in lower_question or "/api/" in lower_question or "javascript" in lower_question:
+        api_path = "/api/db/none"
+        params = {}
+
+    if api_path == "/api/db/balance/by-account" and params.get("account_number") is None and params.get("ccid") is not None:
+        api_path = "/api/db/balance/by-ccid"
+    if api_path == "/api/db/balance/by-ccid" and params.get("ccid") is None and params.get("account_number") is not None:
+        api_path = "/api/db/balance/by-account"
+    if api_path == "/api/db/balance/highlights":
+        params.setdefault("limit", 5)
+
+    return {
+        "api_path": api_path,
+        "params": params,
+        "intent": parsed["intent"],
+        "intent_confidence": parsed["confidence"],
+        "parser_source": parsed["source"],
+    }
+
     params = complete_lookup_params(question, extract_filters(question))
     text = question.lower()
 
@@ -629,6 +768,24 @@ def resolve_question_with_llm(history: list[dict[str, str]], question: str) -> d
 
     if not OPENAI_API_KEY:
         return resolve_question_rule_based(question)
+
+    try:
+        rasa_result = parse_question_with_rasa(question)
+    except requests.RequestException:
+        rasa_result = None
+
+    if rasa_result and rasa_result.get("intent") in INTENT_API_MAP:
+        routed = {
+            "api_path": INTENT_API_MAP[rasa_result["intent"]],
+            "params": complete_lookup_params(question, rasa_result["entities"]),
+            "intent": rasa_result["intent"],
+            "intent_confidence": rasa_result["confidence"],
+            "parser_source": rasa_result["source"],
+            "routing_mode": "rasa",
+        }
+        if routed["api_path"] == "/api/db/balance/highlights":
+            routed["params"].setdefault("limit", 5)
+        return routed
 
     transcript = []
     for item in history[-8:]:
@@ -800,8 +957,29 @@ def health():
             "db_connected": db_ok,
             "db_error": db_error,
             "mock_openai": MOCK_OPENAI,
+            "rasa_configured": bool(RASA_URL),
+            "question_inventory_loaded": bool(QUESTION_INVENTORY),
         }
     )
+
+
+@app.post("/api/nlu/parse")
+def api_nlu_parse():
+    payload = request.get_json(silent=True) or {}
+    message = (payload.get("message") or "").strip()
+    if not message:
+        return jsonify({"error": "Message is required."}), 400
+
+    rasa_result = None
+    if RASA_URL:
+        try:
+            rasa_result = parse_question_with_rasa(message)
+        except requests.RequestException as exc:
+            rasa_result = {"error": str(exc), "source": "rasa"}
+
+    lightweight = parse_question_local(message)
+    routed = resolve_question_rule_based(message)
+    return jsonify({"rasa": rasa_result, "lightweight": lightweight, "routing": routed})
 
 
 @app.post("/api/db/balance/by-ccid")

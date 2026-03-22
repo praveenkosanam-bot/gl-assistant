@@ -79,6 +79,13 @@ Journal Question Is Marked Unsupported
     Should Be Equal    ${response}[body][routing][api_path]    /api/db/unsupported
     Should Contain    ${response}[body][reply]    not implemented yet
 
+Lightweight NLP Parse Returns Intent And Route
+    ${payload}=    Create Dictionary    message=Compare ${PERIOD_NAME} vs ${COMPARE_PERIOD} for account ${ACCOUNT_NUMBER} on ledger ${LEDGER_ID}.
+    ${response}=    Call JSON API    POST    ${APP_URL}/api/nlu/parse    ${payload}
+    Should Be Equal As Integers    ${response}[status]    200
+    Should Be Equal    ${response}[body][lightweight][intent]    balance.diff.two_periods
+    Should Be Equal    ${response}[body][routing][api_path]    /api/db/balance/diff
+
 Direct Account DB API Returns Balance
     ${payload}=    Create Dictionary    ledger_id=${LEDGER_ID}    period_name=${PERIOD_NAME}    account_number=${ACCOUNT_NUMBER}    actual_flag=${ACTUAL_FLAG}
     ${response}=    Call JSON API    POST    ${APP_URL}/api/db/balance/by-account    ${payload}

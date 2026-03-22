@@ -1,0 +1,30 @@
+version: "3.1"
+
+intents:
+  - balance.lookup.ccid.period
+  - balance.lookup.ccid.ytd
+  - balance.lookup.segments.period
+  - balance.diff.two_periods
+  - balance.trend.last_n
+  - balance.type.override
+  - balance.currency.override
+  - balance.why_null_or_zero
+  - balance.explain.calculation
+  - balance.high_level
+  - journals.lookup.basic
+  - journals.summary.by_source
+
+entities:
+  - ledger_id
+  - period
+  - period_from
+  - period_to
+  - ccid
+  - account
+  - actual_flag
+  - currency_code
+  - n
+
+responses:
+  utter_default:
+    - text: "I mapped your question to an intent. The application layer will call the relevant database API."

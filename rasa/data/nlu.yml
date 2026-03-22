@@ -1,0 +1,84 @@
+version: "3.1"
+
+nlu:
+  - intent: balance.lookup.ccid.period
+    examples: |
+      - What is the balance for CCID 123456 in Mar-25?
+      - Show period balance for 123456, MAR-25.
+      - Give me the balance of 123456 this period (MAR-25).
+      - Balance for 123456 in MAR-25 on ledger 101.
+      - Ending balance for CCID 123456 in FEB-25.
+      - Fetch actual balance for ledger 101, period MAR-25, CCID 123456.
+
+  - intent: balance.lookup.ccid.ytd
+    examples: |
+      - What is the YTD for CCID 123456?
+      - Give me YTD balance for 123456 in MAR-25.
+      - YTD on 123456, ledger 101.
+      - Show actual YTD for 123456.
+
+  - intent: balance.lookup.segments.period
+    examples: |
+      - Show balance for Company 01, Dept 200, Account 1110 in Feb-25.
+      - Get 01-200-1110 in MAR-25.
+      - Balance for company 01 account 1110 this period.
+      - What is the balance for 01.200.1110, MAR-25?
+
+  - intent: balance.diff.two_periods
+    examples: |
+      - Compare Jan-25 vs Feb-25 for CCID 123456.
+      - What changed between JAN-25 and FEB-25 on 123456?
+      - Delta for 01-200-1110 between FEB-25 and MAR-25.
+      - Show month-on-month change for CCID 123456 (JAN-25 to FEB-25).
+
+  - intent: balance.trend.last_n
+    examples: |
+      - Show last 5 periods for CCID 123456.
+      - Trend for last 6 months on account 1110.
+      - Give me the 4-period history for 123456.
+      - How has 1110 trended recently?
+
+  - intent: balance.type.override
+    examples: |
+      - Budget balance for 01-200-1110 in MAR-25.
+      - Encumbrance amount for CCID 123456 this period.
+      - Actuals for 123456 in FEB-25.
+      - Show budget YTD for 01.200.1110.
+
+  - intent: balance.currency.override
+    examples: |
+      - Show balance for 123456 in USD for MAR-25.
+      - Convert CCID 123456 to ledger currency in FEB-25.
+      - Give foreign currency balance for 123456 (EUR).
+
+  - intent: balance.why_null_or_zero
+    examples: |
+      - Why is the balance null for CCID 123456 in MAR-25?
+      - Why am I getting zero for 01-200-1110 this period?
+      - Is the period open for this ledger?
+      - Does this CCID exist?
+
+  - intent: balance.explain.calculation
+    examples: |
+      - Explain how the balance for 123456 in MAR-25 was calculated.
+      - Break down begin balance and period activity for 01-200-1110.
+      - Show debit and credit breakdown for CCID 123456 this period.
+
+  - intent: balance.high_level
+    examples: |
+      - What does our GL look like this month?
+      - Show accounts with high balances in MAR-25.
+      - Which accounts changed the most this period?
+      - Anything unusual in the GL this month?
+
+  - intent: journals.lookup.basic
+    examples: |
+      - Show journals for CCID 123456 in FEB-25.
+      - Get all posted journals for MAR-25 for 01-200-1110.
+      - What journals hit 123456 this period?
+
+  - intent: journals.summary.by_source
+    examples: |
+      - Journal totals by source (Manual vs Payables) for MAR-25.
+      - Show journal summary by category in FEB-25.
+      - How much came from Payables this month?
