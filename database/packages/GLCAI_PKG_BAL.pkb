@@ -78,6 +78,87 @@ CREATE OR REPLACE PACKAGE BODY GLCAI_PKG_BAL AS
 
 
   /******************************************************************
+   * Public: YTD Balance for a given account number (SEGMENT3)
+   ******************************************************************/
+  PROCEDURE get_ytd_balance_by_account(
+    p_ledger_id       IN  NUMBER,
+    p_period_name     IN  VARCHAR2,
+    p_account_number  IN  VARCHAR2,
+    p_actual_flag     IN  VARCHAR2,
+    o_ytd_balance     OUT NUMBER,
+    o_status_msg      OUT VARCHAR2
+  ) IS
+    l_match_count NUMBER;
+  BEGIN
+    o_status_msg := NULL;
+
+    SELECT COUNT(*),
+           SUM(NVL(gb.begin_balance_dr,0) - NVL(gb.begin_balance_cr,0)
+             + NVL(gb.period_net_dr,0)   - NVL(gb.period_net_cr,0))
+      INTO l_match_count, o_ytd_balance
+      FROM gl_balances gb
+      JOIN gl_code_combinations gcc
+        ON gcc.code_combination_id = gb.code_combination_id
+     WHERE gb.ledger_id            = p_ledger_id
+       AND gb.period_name          = p_period_name
+       AND gb.actual_flag          = NVL(p_actual_flag,'A')
+       AND gcc.segment3            = p_account_number;
+
+    IF l_match_count = 0 THEN
+      o_ytd_balance := NULL;
+      o_status_msg  := 'No GL_BALANCES row found for inputs';
+    END IF;
+
+  EXCEPTION
+    WHEN OTHERS THEN
+      o_ytd_balance := NULL;
+      o_status_msg  := 'ERR: '||SQLERRM;
+  END get_ytd_balance_by_account;
+
+
+  /******************************************************************
+   * Public: Period Activity (DR-CR) for a given account number
+   ******************************************************************/
+  PROCEDURE get_period_activity_by_account(
+    p_ledger_id       IN  NUMBER,
+    p_period_name     IN  VARCHAR2,
+    p_account_number  IN  VARCHAR2,
+    p_actual_flag     IN  VARCHAR2,
+    o_period_amt      OUT NUMBER,
+    o_status_msg      OUT VARCHAR2
+  ) IS
+    l_dr NUMBER; l_cr NUMBER;
+    l_match_count NUMBER;
+  BEGIN
+    o_status_msg := NULL;
+
+    SELECT COUNT(*),
+           SUM(NVL(gb.period_net_dr,0)),
+           SUM(NVL(gb.period_net_cr,0))
+      INTO l_match_count, l_dr, l_cr
+      FROM gl_balances gb
+      JOIN gl_code_combinations gcc
+        ON gcc.code_combination_id = gb.code_combination_id
+     WHERE gb.ledger_id            = p_ledger_id
+       AND gb.period_name          = p_period_name
+       AND gb.actual_flag          = NVL(p_actual_flag,'A')
+       AND gcc.segment3            = p_account_number;
+
+    IF l_match_count = 0 THEN
+      o_period_amt := NULL;
+      o_status_msg := 'No GL_BALANCES row found for inputs';
+    ELSE
+      o_period_amt := l_dr - l_cr;
+    END IF;
+
+  EXCEPTION
+    WHEN OTHERS THEN
+      o_period_amt := NULL;
+      o_status_msg := 'ERR: '||SQLERRM;
+  END get_period_activity_by_account;
+
+
+  /******************************************************************
    * Convenience scalar function for quick assertions
    ******************************************************************/
   FUNCTION get_ytd_balance_f(
@@ -99,6 +180,27 @@ CREATE OR REPLACE PACKAGE BODY GLCAI_PKG_BAL AS
     );
     RETURN l_val;
   END get_ytd_balance_f;
+
+
+  FUNCTION get_ytd_balance_by_account_f(
+    p_ledger_id       IN  NUMBER,
+    p_period_name     IN  VARCHAR2,
+    p_account_number  IN  VARCHAR2,
+    p_actual_flag     IN  VARCHAR2
+  ) RETURN NUMBER IS
+    l_val NUMBER;
+    l_msg VARCHAR2(4000);
+  BEGIN
+    get_ytd_balance_by_account(
+      p_ledger_id      => p_ledger_id,
+      p_period_name    => p_period_name,
+      p_account_number => p_account_number,
+      p_actual_flag    => p_actual_flag,
+      o_ytd_balance    => l_val,
+      o_status_msg     => l_msg
+    );
+    RETURN l_val;
+  END get_ytd_balance_by_account_f;
 
 END GLCAI_PKG_BAL;
 /

@@ -30,12 +30,40 @@ CREATE OR REPLACE PACKAGE GLCAI_PKG_BAL AUTHID CURRENT_USER AS
     o_status_msg    OUT VARCHAR2
   );
 
+  /* Returns YTD balance aggregated for a given natural account number. */
+  PROCEDURE get_ytd_balance_by_account(
+    p_ledger_id       IN  NUMBER,
+    p_period_name     IN  VARCHAR2,
+    p_account_number  IN  VARCHAR2,
+    p_actual_flag     IN  VARCHAR2 DEFAULT 'A',
+    o_ytd_balance     OUT NUMBER,
+    o_status_msg      OUT VARCHAR2
+  );
+
+  /* Returns period activity aggregated for a given natural account number. */
+  PROCEDURE get_period_activity_by_account(
+    p_ledger_id       IN  NUMBER,
+    p_period_name     IN  VARCHAR2,
+    p_account_number  IN  VARCHAR2,
+    p_actual_flag     IN  VARCHAR2 DEFAULT 'A',
+    o_period_amt      OUT NUMBER,
+    o_status_msg      OUT VARCHAR2
+  );
+
   /* Convenience scalar function (helps Robot/SQLcl quickly assert values). */
   FUNCTION get_ytd_balance_f(
     p_ledger_id     IN  NUMBER,
     p_period_name   IN  VARCHAR2,
     p_ccid          IN  NUMBER,
     p_actual_flag   IN  VARCHAR2 DEFAULT 'A'
+  ) RETURN NUMBER;
+
+  /* Convenience scalar function for natural-account based assertions. */
+  FUNCTION get_ytd_balance_by_account_f(
+    p_ledger_id       IN  NUMBER,
+    p_period_name     IN  VARCHAR2,
+    p_account_number  IN  VARCHAR2,
+    p_actual_flag     IN  VARCHAR2 DEFAULT 'A'
   ) RETURN NUMBER;
 
 END GLCAI_PKG_BAL;
