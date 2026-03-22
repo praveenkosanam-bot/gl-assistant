@@ -35,6 +35,8 @@ load_dotenv()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses"
+DEFAULT_LEDGER_NAME = os.getenv("DEFAULT_LEDGER_NAME", "US Primary Ledger")
+DEFAULT_LEDGER_ID = int(os.getenv("DEFAULT_LEDGER_ID", "300000046975971"))
 
 DB_CONFIG = {
     "user": os.getenv("DB_USER", "XXSBID_605"),
@@ -183,6 +185,12 @@ def extract_filters(message: str) -> dict[str, Any]:
         seg_match = re.search(r"\b\d{2}[.\-]\d{3}[.\-](\d{4,6})\b", message)
         if seg_match:
             results["account_number"] = seg_match.group(1)
+    if "account_number" not in results and "ccid" not in results:
+        lower_message = message.lower()
+        if any(token in lower_message for token in ("balance", "account", "period", "ytd", "activity")):
+            bare_number_match = re.search(r"\b(\d{4,6})\b", message)
+            if bare_number_match:
+                results["account_number"] = bare_number_match.group(1)
 
     return results
 
@@ -358,8 +366,10 @@ def seed_lookup(
 
 
 def complete_lookup_params(question: str, params: dict[str, Any]) -> dict[str, Any]:
-    completed = dict(params)
+    completed = extract_filters(question) if question else {}
+    completed.update(params)
     completed.setdefault("actual_flag", "A")
+    completed.setdefault("ledger_id", DEFAULT_LEDGER_ID)
     if completed.get("period_name"):
         completed["period_name"] = normalize_period(completed["period_name"])
     if completed.get("period_from"):
@@ -388,6 +398,38 @@ def complete_lookup_params(question: str, params: dict[str, Any]) -> dict[str, A
         completed["resolved_from_seed"] = False
 
     return completed
+
+
+def validate_route_params(api_path: str, params: dict[str, Any]) -> str | None:
+    required_fields: dict[str, tuple[str, ...]] = {
+        "/api/db/balance/by-ccid": ("ledger_id", "period_name", "ccid"),
+        "/api/db/balance/by-account": ("ledger_id", "period_name", "account_number"),
+        "/api/db/balance/diff": ("ledger_id", "period_from", "period_to"),
+        "/api/db/balance/trend": ("ledger_id",),
+        "/api/db/balance/explain": ("ledger_id", "period_name"),
+        "/api/db/balance/highlights": ("ledger_id", "period_name"),
+        "/api/db/balance/diagnostics": (),
+    }
+
+    required = required_fields.get(api_path)
+    if required is None:
+        return None
+
+    missing = [field for field in required if params.get(field) is None]
+    if api_path in {"/api/db/balance/diff", "/api/db/balance/explain"}:
+        if params.get("ccid") is None and params.get("account_number") is None:
+            missing.append("ccid or account_number")
+    if api_path == "/api/db/balance/diagnostics":
+        if params.get("ledger_id") is None:
+            missing.append("ledger_id")
+        if params.get("period_name") is None:
+            missing.append("period_name")
+        if params.get("ccid") is None and params.get("account_number") is None:
+            missing.append("ccid or account_number")
+
+    if not missing:
+        return None
+    return "Missing required query inputs: " + ", ".join(missing)
 
 
 def get_account_for_ccid(ccid: int) -> str | None:
@@ -1051,6 +1093,10 @@ def chat():
         result = dispatch_db_api(api_path, routed.get("params") or {})
         reply = format_chat_reply(api_path, result)
         return jsonify({"reply": reply, "routing": routed, "db_result": None, "timings": timings})
+
+    validation_error = validate_route_params(api_path, routed.get("params") or {})
+    if validation_error:
+        return jsonify({"error": validation_error, "routing": routed}), 400
 
     try:
         started = time.perf_counter()
