@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>GL Assistant</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+  </head>
+  <body>
+    <div class="page-shell">
+      <section class="hero-panel">
+        <p class="eyebrow">Oracle GL + OpenAI</p>
+        <h1>Balance questions, live database context, one assistant.</h1>
+        <p class="lede">
+          Ask about CCIDs, account numbers, periods, ledgers, or how to call the app APIs.
+          The server queries Oracle first, then sends the context to OpenAI for the answer.
+        </p>
+
+        <div class="status-strip" id="status-strip">
+          <span class="status-pill">Checking app health...</span>
+        </div>
+
+        <div class="example-card">
+          <p class="example-title">Try prompts like</p>
+          <button class="prompt-chip" data-prompt="What is the YTD balance for account 11200 in ledger 300000100831269 for period 12-21?">YTD by account</button>
+          <button class="prompt-chip" data-prompt="What is the period activity for CCID 345501 in ledger 300000100831269 for period 12-21?">Activity by CCID</button>
+          <button class="prompt-chip" data-prompt="How do I call the /api/chat endpoint from JavaScript?">API usage</button>
+        </div>
+      </section>
+
+      <section class="chat-panel">
+        <div class="chat-header">
+          <div>
+            <p class="chat-label">Assistant</p>
+            <h2>GL Assistant</h2>
+          </div>
+          <p class="model-badge">Model: {{ model }}</p>
+        </div>
+
+        <div class="chat-log" id="chat-log">
+          <article class="message assistant">
+            <p class="message-role">Assistant</p>
+            <div class="message-body">
+              Ask a balance question with `ledger`, `period`, and `account` or `ccid`, or ask how to use the APIs.
+            </div>
+          </article>
+        </div>
+
+        <form class="composer" id="chat-form">
+          <label class="sr-only" for="message">Message</label>
+          <textarea id="message" name="message" rows="3" placeholder="Ask about balances or API usage..." required></textarea>
+          <div class="composer-row">
+            <p class="helper-text">The API key stays on the server in <code>OPENAI_API_KEY</code>.</p>
+            <button type="submit">Send</button>
+          </div>
+        </form>
+      </section>
+    </div>
+
+    <template id="message-template">
+      <article class="message">
+        <p class="message-role"></p>
+        <div class="message-body"></div>
+      </article>
+    </template>
+
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+  </body>
+</html>
