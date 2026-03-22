@@ -15,3 +15,7 @@ Thumbs.db
 
 # Local app config
 .env
+
+# Python cache
+__pycache__/
+*.pyc
