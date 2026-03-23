@@ -189,16 +189,32 @@ def call_glc_balance(
         l_bal   NUMBER;
         l_msg   VARCHAR2(4000);
     BEGIN
+        -- Enable Debugging
+        glc_utility.g_debug_flag := 'Y';
+        glc_utility.g_log_level := '5';
+
         glc_utility.init_session(
             p_session_id => :session_id,
-            p_source_id => 1,
-            p_user_id => -1,
+            p_source_id => 5,
+            p_user_id => 1,
             p_role => 'ADMIN',
-            p_role_id => 1,
+            p_role_id => 30000219190448,
             p_session_params => NULL
         );
 
-        l_fields(1) := 'SEGMENT3';
+        -- Initialize the field group metadata for COA 21
+        glc_utility.set_field_groups(p_coa_id => 21);
+
+        -- Passing values in field tables is exclusive with p_gl_account_string
+        -- We ensure indices 1 and 2 exist (even if empty) to avoid ORA-01403 
+        -- during internal 1..COUNT loops in the utility package.
+        l_fields(1) := '';
+        l_fields(2) := '';
+        l_fields(3) := :account_string; 
+        l_hier(1)   := '';
+        l_hier(2)   := '';
+        l_hier(3)   := 'GLC_HIER_1169';
+
         glc_balances_pkg.get_balance(
             p_ledger_name => NVL(:ledger_name, 'US Primary Ledger'),
             p_period_name => :period_name,
@@ -212,7 +228,7 @@ def call_glc_balance(
             p_period_offset => NULL,
             p_encumbrance_name => NULL,
             p_budget_name => NULL,
-            p_gl_account_string => :account_string,
+            p_gl_account_string => NULL,
             p_fields_tbl => l_fields,
             p_field_hier_tbl => l_hier,
             p_security_str => NULL,
@@ -270,16 +286,32 @@ def call_glc_drill(
         l_filter glc_utility.varchar2_tab;
         l_msg   VARCHAR2(4000);
     BEGIN
+        -- Enable Debugging
+        glc_utility.g_debug_flag := 'Y';
+        glc_utility.g_log_level := '5';
+
         glc_utility.init_session(
             p_session_id => :session_id,
-            p_source_id => 1,
-            p_user_id => -1,
+            p_source_id => 5,
+            p_user_id => 1,
             p_role => 'ADMIN',
-            p_role_id => 1,
+            p_role_id => 30000219190448,
             p_session_params => NULL
         );
 
-        l_fields(1) := 'SEGMENT3';
+        -- Initialize the field group metadata for COA 21
+        glc_utility.set_field_groups(p_coa_id => 21);
+
+        -- Passing values in field tables is exclusive with p_gl_account_string
+        -- We ensure indices 1 and 2 exist (even if empty) to avoid ORA-01403
+        l_fields(1) := '';
+        l_fields(2) := '';
+        l_fields(3) := :account_string;
+
+        l_hier(1)   := '';
+        l_hier(2)   := '';
+        l_hier(3)   := 'GLC_HIER_1169';
+
         glc_drill_pkg.get_journal_dtl(
             p_ledger_name => NVL(:ledger_name, 'US Primary Ledger'),
             p_period_name => :period_name,
@@ -289,7 +321,7 @@ def call_glc_drill(
             p_trailing_months => 0,
             p_debit_credit_flag => NULL,
             p_entered_flag => 'B',
-            p_gl_account_string => :account_string,
+            p_gl_account_string => NULL,
             p_fields_tbl => l_fields,
             p_field_hier_tbl => l_hier,
             p_filter_tbl => l_filter,
