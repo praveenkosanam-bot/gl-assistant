@@ -17,7 +17,7 @@ function addMessage(role, text) {
 
 function renderStatus(health) {
   const items = [
-    `OpenAI key: ${health.openai_configured ? "configured" : "missing"}`,
+    `Dynamic API: configured`,
     `Model: ${health.openai_model}`,
     `DB: ${health.db_connected ? "connected" : "unavailable"}`,
   ];
@@ -42,6 +42,9 @@ async function loadHealth() {
 }
 
 async function sendMessage(prompt) {
+  const provider = document.getElementById("provider") ? document.getElementById("provider").value : "openai";
+  const apiKey = document.getElementById("api_key") ? document.getElementById("api_key").value : "";
+
   addMessage("user", prompt);
   history.push({ role: "user", content: prompt });
   messageInput.value = "";
@@ -50,7 +53,7 @@ async function sendMessage(prompt) {
     const response = await fetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: prompt, history }),
+      body: JSON.stringify({ message: prompt, history, provider: provider, api_key: apiKey }),
     });
     const payload = await response.json();
     if (!response.ok) {

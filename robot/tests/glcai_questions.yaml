@@ -3,164 +3,117 @@ domain: GL Assistant
 notes: Natural-language question variants for GL (Balances first, Journals later).
   Use as training & test seed.
 intents:
-- name: balance.lookup.ccid.period
-  description: Get period/YTD balance for a specific CCID and period (optionally ledger,
-    actual_flag).
-  entities:
-  - ledger_id
-  - period
-  - ccid
-  - actual_flag
-  utterances:
-  - What is the balance for CCID 123456 in Mar-25?
-  - Show period balance for 123456, MAR-25.
-  - Give me the balance of 123456 this period (MAR-25).
-  - Balance for 123456 in MAR-25 on ledger 101.
-  - Ending balance for CCID 123456 in FEB-25.
-  - Fetch actual balance for ledger 101, period MAR-25, CCID 123456.
-- name: balance.lookup.ccid.ytd
-  description: Get YTD balance for a specific CCID (period implied as current or supplied
-    separately).
-  entities:
-  - ledger_id
-  - period
-  - ccid
-  - actual_flag
-  utterances:
-  - What is the YTD for CCID 123456?
-  - Give me YTD balance for 123456 in MAR-25.
-  - YTD on 123456, ledger 101.
-  - Show actual YTD for 123456.
 - name: balance.lookup.segments.period
-  description: Get balance using COA segments (company/department/account).
+  description: Get balance using COA segments (company/department/account) or natural account.
   entities:
-  - ledger_id
   - period
   - company
   - department
   - account
   - actual_flag
   utterances:
-  - Show balance for Company 01, Dept 200, Account 1110 in Feb-25.
-  - Get 01-200-1110 in MAR-25.
-  - Balance for company 01 account 1110 this period.
-  - What is the balance for 01.200.1110, MAR-25?
+  - What is the balance for Account 16160 in 03-23?
+  - Show period balance for 16160, 03-23.
+  - Give me the balance of 16160 this period (03-23).
+  - Balance for 16160 in 03-23 on US Primary Ledger.
+  - Ending balance for Account 16160 in 02-23.
+  - Fetch actual balance for US Primary Ledger, period 03-23, Account 16160.
+  - Show balance for Company 942, Dept 90, Account 16160 in 02-23.
+  - Get 942-90-16160 in 03-23.
+  - Balance for company 942 account 16160 this period.
+  - What is the YTD for Account 16160?
+  - Give me YTD balance for 16160 in 03-23.
+  - YTD on 16160, US Primary Ledger.
+  - Show actual YTD for 16160.
 - name: balance.diff.two_periods
-  description: Compare balances (difference) across two periods for a CCID or segments.
+  description: Compare balances (difference) across two periods for an account or segments.
   entities:
-  - ledger_id
   - period_from
   - period_to
-  - ccid
+  - account
   - company
   - department
-  - account
   - actual_flag
   utterances:
-  - Compare Jan-25 vs Feb-25 for CCID 123456.
-  - What changed between JAN-25 and FEB-25 on 123456?
-  - Δ for 01-200-1110 between FEB-25 and MAR-25.
-  - Show month-on-month change for CCID 123456 (JAN-25 to FEB-25).
+  - Compare 01-23 vs 02-23 for Account 16160.
+  - What changed between 01-23 and 02-23 on 16160?
+  - Δ for 942-90-16160 between 02-23 and 03-23.
+  - Show month-on-month change for Account 16160 (01-23 to 02-23).
 - name: balance.trend.last_n
-  description: Return last N periods balances for a CCID or account (trend).
+  description: Return last N periods balances for an account (trend).
   entities:
-  - ledger_id
   - period
-  - ccid
   - account
   - n
   - actual_flag
   utterances:
-  - Show last 5 periods for CCID 123456.
-  - Trend for last 6 months on account 1110.
-  - Give me the 4-period history for 123456.
-  - How has 1110 trended recently?
+  - Show last 5 periods for Account 16160.
+  - Trend for last 6 months on account 16160.
+  - Give me the 4-period history for 16160.
+  - How has 16160 trended recently?
 - name: balance.type.override
   description: Specify Actual/Budget/Encumbrance balances.
   entities:
-  - ledger_id
   - period
-  - ccid
+  - account
   - company
   - department
-  - account
   - actual_flag
   utterances:
-  - Budget balance for 01-200-1110 in MAR-25.
-  - Encumbrance amount for CCID 123456 this period.
-  - Actuals for 123456 in FEB-25.
-  - Show budget YTD for 01.200.1110.
+  - Budget balance for 942-90-16160 in 03-23.
+  - Encumbrance amount for Account 16160 this period.
+  - Actuals for 16160 in 02-23.
+  - Show budget YTD for 942.90.16160.
 - name: balance.currency.override
   description: Ask results in a specific currency (if supported by backend).
   entities:
-  - ledger_id
   - period
-  - ccid
+  - account
   - currency_code
   - actual_flag
   utterances:
-  - Show balance for 123456 in USD for MAR-25.
-  - Convert CCID 123456 to ledger currency in FEB-25.
-  - Give foreign currency balance for 123456 (EUR).
-- name: balance.why_null_or_zero
-  description: Diagnostic questions when results look missing or zero.
-  entities:
-  - ledger_id
-  - period
-  - ccid
-  - company
-  - department
-  - account
-  utterances:
-  - Why is the balance null for CCID 123456 in MAR-25?
-  - Why am I getting zero for 01-200-1110 this period?
-  - Is the period open for this ledger?
-  - Does this CCID exist?
+  - Show balance for 16160 in USD for 03-23.
+  - Convert Account 16160 to ledger currency in 02-23.
+  - Give foreign currency balance for 16160 (EUR).
 - name: balance.explain.calculation
   description: Ask to explain how a balance was derived (begin + activity).
   entities:
-  - ledger_id
   - period
-  - ccid
+  - account
   - company
   - department
-  - account
   utterances:
-  - Explain how the balance for 123456 in MAR-25 was calculated.
-  - Break down begin balance and period activity for 01-200-1110.
-  - Show debit/credit breakdown for CCID 123456 this period.
+  - Explain how the balance for 16160 in 03-23 was calculated.
+  - Break down begin balance and period activity for 942-90-16160.
+  - Show debit/credit breakdown for Account 16160 this period.
 - name: balance.high_level
   description: Exploratory / conversational high-level asks.
   entities:
-  - ledger_id
   - period
   utterances:
   - What does our GL look like this month?
-  - Show accounts with high balances in MAR-25.
+  - Show accounts with high balances in 03-23.
   - Which accounts changed the most this period?
   - Anything unusual in the GL this month?
 - name: journals.lookup.basic
   description: 'Phase 2: basic journal lookups for an account/period.'
   entities:
-  - ledger_id
   - period
-  - ccid
+  - account
   - company
   - department
-  - account
   - status
   utterances:
-  - Show journals for CCID 123456 in FEB-25.
-  - Get all posted journals for MAR-25 for 01-200-1110.
-  - What journals hit 123456 this period?
+  - Show journals for Account 16160 in 02-23.
+  - Get all posted journals for 03-23 for 942-90-16160.
+  - What journals hit 16160 this period?
 - name: journals.summary.by_source
   description: 'Phase 2: journal totals by source/category.'
   entities:
-  - ledger_id
   - period
   - source
   - category
   utterances:
-  - Journal totals by source (Manual vs Payables) for MAR-25.
-  - Show journal summary by category in FEB-25.
+  - Journal totals by source (Manual vs Payables) for 03-23.
+  - Show journal summary by category in 02-23.
   - How much came from Payables this month?

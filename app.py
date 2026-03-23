@@ -32,7 +32,6 @@ def load_dotenv(path: str = ".env") -> None:
 
 load_dotenv()
 
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses"
 DEFAULT_LEDGER_NAME = os.getenv("DEFAULT_LEDGER_NAME", "US Primary Ledger")
@@ -70,6 +69,38 @@ Rules:
 - Balance data is sourced from Oracle package GLCAI_PKG_BAL.
 - Account-based lookups use GL_CODE_COMBINATIONS.SEGMENT3 as the account number.
 - Keep answers short, direct, and useful.
+"""
+
+ROUTING_INSTRUCTIONS = """
+You must output ONLY valid JSON using the following structure. Do NOT output any markdown blocks or formatting.
+{
+  "api_path": "<route>",
+  "params": { ... }
+}
+
+Allowed routes:
+- /api/db/balance/by-ccid
+- /api/db/balance/by-account
+- /api/db/balance/diff
+- /api/db/balance/trend
+- /api/db/balance/explain
+- /api/db/balance/highlights
+- /api/db/balance/diagnostics
+- /api/db/none
+- /api/db/unsupported
+
+Routing Rules:
+- If the question is about balances for a CCID, route to by-ccid.
+- If the question is about balances for an account number, route to by-account.
+- If the question asks to compare two periods, use diff.
+- If it asks for history or last N periods, use trend.
+- If it asks to explain a calculation, use explain.
+- If it asks why a result is null/zero or whether a CCID exists, use diagnostics.
+- If it asks for high-level GL balance highlights or highest activity, use highlights. Include "sort_by": "activity" in params if activity is requested.
+- If it is an API usage question, use /api/db/none.
+- If it asks about journals, use /api/db/unsupported.
+- Extract only params that are present or safely inferable.
+- Default actual_flag to A when omitted.
 """
 
 BALANCE_KEYWORDS = ("balance", "ccid", "account", "ledger", "period", "ytd", "activity")
@@ -192,6 +223,9 @@ def extract_filters(message: str) -> dict[str, Any]:
             bare_number_match = re.search(r"\b(\d{4,6})\b", message)
             if bare_number_match:
                 results["account_number"] = bare_number_match.group(1)
+
+    if "activity" in message.lower():
+        results["sort_by"] = "activity"
 
     return results
 
@@ -678,11 +712,13 @@ def db_balance_trend(params: dict[str, Any]) -> dict[str, Any]:
 
 def db_balance_highlights(params: dict[str, Any]) -> dict[str, Any]:
     limit = int(params.get("limit") or 5)
+    sort_expr = "ABS(SUM(NVL(gb.period_net_dr,0) - NVL(gb.period_net_cr,0)))" if params.get("sort_by") == "activity" else "ABS(SUM(NVL(gb.begin_balance_dr,0) - NVL(gb.begin_balance_cr,0) + NVL(gb.period_net_dr,0) - NVL(gb.period_net_cr,0)))"
     rows = query_all(
-        """
+        f"""
         SELECT gcc.segment3 AS account_number,
                SUM(NVL(gb.begin_balance_dr,0) - NVL(gb.begin_balance_cr,0)
-                 + NVL(gb.period_net_dr,0) - NVL(gb.period_net_cr,0)) AS ytd_balance
+                 + NVL(gb.period_net_dr,0) - NVL(gb.period_net_cr,0)) AS ytd_balance,
+               SUM(NVL(gb.period_net_dr,0) - NVL(gb.period_net_cr,0)) AS period_activity
           FROM gl_balances gb
           JOIN gl_code_combinations gcc
             ON gcc.code_combination_id = gb.code_combination_id
@@ -691,8 +727,7 @@ def db_balance_highlights(params: dict[str, Any]) -> dict[str, Any]:
            AND gb.actual_flag = :actual_flag
            AND gcc.segment3 IS NOT NULL
          GROUP BY gcc.segment3
-         ORDER BY ABS(SUM(NVL(gb.begin_balance_dr,0) - NVL(gb.begin_balance_cr,0)
-                        + NVL(gb.period_net_dr,0) - NVL(gb.period_net_cr,0))) DESC
+         ORDER BY {sort_expr} DESC
          FETCH FIRST :limit ROWS ONLY
         """,
         {
@@ -706,7 +741,7 @@ def db_balance_highlights(params: dict[str, Any]) -> dict[str, Any]:
         "ledger_id": params["ledger_id"],
         "period_name": params["period_name"],
         "actual_flag": params.get("actual_flag", "A"),
-        "top_accounts": [{"account_number": row[0], "ytd_balance": float(row[1] or 0)} for row in rows],
+        "top_accounts": [{"account_number": row[0], "ytd_balance": float(row[1] or 0), "period_activity": float(row[2] or 0)} for row in rows],
     }
 
 
@@ -781,28 +816,6 @@ def resolve_question_rule_based(question: str) -> dict[str, Any]:
     parsed = parse_question_local(question)
     params = complete_lookup_params(question, parsed["entities"])
     api_path = INTENT_API_MAP.get(parsed["intent"], "/api/db/balance/highlights")
-    lower_question = question.lower()
-
-    if "how do i call" in lower_question or "/api/" in lower_question or "javascript" in lower_question:
-        api_path = "/api/db/none"
-        params = {}
-
-    if api_path == "/api/db/balance/by-account" and params.get("account_number") is None and params.get("ccid") is not None:
-        api_path = "/api/db/balance/by-ccid"
-    if api_path == "/api/db/balance/by-ccid" and params.get("ccid") is None and params.get("account_number") is not None:
-        api_path = "/api/db/balance/by-account"
-    if api_path == "/api/db/balance/highlights":
-        params.setdefault("limit", 5)
-
-    return {
-        "api_path": api_path,
-        "params": params,
-        "intent": parsed["intent"],
-        "intent_confidence": parsed["confidence"],
-        "parser_source": parsed["source"],
-    }
-
-    params = complete_lookup_params(question, extract_filters(question))
     text = question.lower()
 
     if "source" in text or "journals" in text or "payables" in text or "posted journals" in text:
@@ -816,35 +829,38 @@ def resolve_question_rule_based(question: str) -> dict[str, Any]:
         return {"api_path": "/api/db/none", "params": {}, "reason": "This is an API usage question, not a DB query."}
 
     if "trend" in text or "last " in text or "history" in text or "trended" in text:
-        return {"api_path": "/api/db/balance/trend", "params": params}
-
-    if "compare" in text or "changed between" in text or "month-on-month" in text or "Δ" in question or "delta" in text:
-        return {"api_path": "/api/db/balance/diff", "params": params}
-
-    if "explain" in text or "break down" in text or "breakdown" in text or "debit/credit" in text:
-        return {"api_path": "/api/db/balance/explain", "params": params}
-
-    if "why" in text or "zero" in text or "null" in text or "exist" in text or "open for this ledger" in text:
-        return {"api_path": "/api/db/balance/diagnostics", "params": params}
-
-    if "high balances" in text or "changed the most" in text or "unusual" in text or "what does our gl look like" in text:
+        api_path = "/api/db/balance/trend"
+    elif "compare" in text or "changed between" in text or "month-on-month" in text or "Δ" in question or "delta" in text:
+        api_path = "/api/db/balance/diff"
+    elif "explain" in text or "break down" in text or "breakdown" in text or "debit/credit" in text:
+        api_path = "/api/db/balance/explain"
+    elif "why" in text or "zero" in text or "null" in text or "exist" in text or "open for this ledger" in text:
+        api_path = "/api/db/balance/diagnostics"
+    elif "high balances" in text or "changed the most" in text or "unusual" in text or "what does our gl look like" in text or "highest activity" in text or "highest" in text:
         params.setdefault("limit", 5)
-        return {"api_path": "/api/db/balance/highlights", "params": params}
+        api_path = "/api/db/balance/highlights"
 
-    if params.get("ccid") is not None:
-        return {"api_path": "/api/db/balance/by-ccid", "params": params}
+    if api_path == "/api/db/balance/by-account" and params.get("account_number") is None and params.get("ccid") is not None:
+        api_path = "/api/db/balance/by-ccid"
+    if api_path == "/api/db/balance/by-ccid" and params.get("ccid") is None and params.get("account_number") is not None:
+        api_path = "/api/db/balance/by-account"
+    if api_path == "/api/db/balance/highlights":
+        params.setdefault("limit", 5)
 
-    if params.get("account_number") is not None:
-        return {"api_path": "/api/db/balance/by-account", "params": params}
+    if params.get("account_number") in ("has", "is", "for", "in", "the", "change", "what", "which"):
+        params["account_number"] = None
 
-    return {"api_path": "/api/db/balance/highlights", "params": params}
+    return {
+        "api_path": api_path,
+        "params": params,
+        "intent": parsed["intent"],
+        "intent_confidence": parsed["confidence"],
+        "parser_source": parsed["source"],
+    }
 
 
-def resolve_question_with_llm(history: list[dict[str, str]], question: str) -> dict[str, Any]:
-    if MOCK_OPENAI:
-        return resolve_question_rule_based(question)
-
-    if not OPENAI_API_KEY:
+def resolve_question_with_llm(history: list[dict[str, str]], question: str, provider: str, api_key: str) -> dict[str, Any]:
+    if MOCK_OPENAI or not api_key:
         return resolve_question_rule_based(question)
 
     try:
@@ -908,40 +924,63 @@ Rules:
     session = requests.Session()
     session.trust_env = False
     try:
-        response = session.post(
-            OPENAI_RESPONSES_URL,
-            headers={
-                "Authorization": f"Bearer {OPENAI_API_KEY}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": OPENAI_MODEL,
-                "instructions": SYSTEM_PROMPT,
-                "input": [
-                    {
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "input_text",
-                                "text": prompt,
-                            }
-                        ],
-                    }
-                ],
-            },
-            timeout=60,
-        )
-        response.raise_for_status()
-        payload = response.json()
-        text = extract_output_text(payload)
+        if provider == "anthropic":
+            response = session.post(
+                "https://api.anthropic.com/v1/messages",
+                headers={
+                    "x-api-key": api_key,
+                    "anthropic-version": "2023-06-01",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": "claude-3-5-sonnet-20241022",
+                    "system": SYSTEM_PROMPT + "\n" + ROUTING_INSTRUCTIONS,
+                    "messages": [{"role": "user", "content": prompt}],
+                    "max_tokens": 1024,
+                    "temperature": 0.0
+                },
+                timeout=60,
+            )
+            response.raise_for_status()
+            text = response.json().get("content", [{}])[0].get("text", "")
+        elif provider == "gemini":
+            response = session.post(
+                f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}",
+                headers={"Content-Type": "application/json"},
+                json={
+                    "systemInstruction": {"parts": [{"text": SYSTEM_PROMPT + "\n" + ROUTING_INSTRUCTIONS}]},
+                    "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+                    "generationConfig": {"temperature": 0.0}
+                },
+                timeout=60,
+            )
+            response.raise_for_status()
+            text = response.json().get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+        else:
+            response = session.post(
+                OPENAI_RESPONSES_URL,
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": OPENAI_MODEL,
+                    "instructions": SYSTEM_PROMPT + "\n" + ROUTING_INSTRUCTIONS,
+                    "input": [{"role": "user", "content": [{"type": "input_text", "text": prompt}]}],
+                },
+                timeout=60,
+            )
+            response.raise_for_status()
+            text = extract_output_text(response.json())
+
         if not text:
-            raise RuntimeError("OpenAI response did not contain routing output.")
+            raise RuntimeError(f"{provider} response did not contain routing output.")
         try:
             routed = json.loads(text)
         except json.JSONDecodeError:
             match = re.search(r"\{.*\}", text, re.DOTALL)
             if not match:
-                raise RuntimeError(f"OpenAI route output was not valid JSON: {text}")
+                raise RuntimeError(f"{provider} route output was not valid JSON: {text}")
             routed = json.loads(match.group(0))
 
         if routed.get("api_path") not in SUPPORTED_API_PATHS | {"/api/db/none", "/api/db/unsupported"}:
@@ -1006,9 +1045,9 @@ def format_chat_reply(api_path: str, result: dict[str, Any]) -> str:
         )
     if api_path == "/api/db/balance/highlights":
         highlights = ", ".join(
-            f"{item['account_number']} ({format_currency(item['ytd_balance'])})" for item in result.get("top_accounts", [])
+            f"{item['account_number']} (YTD: {format_currency(item['ytd_balance'])}, Activity: {format_currency(item.get('period_activity', 0))})" for item in result.get("top_accounts", [])
         )
-        return f"Top balance accounts for {result['period_name']}: {highlights}"
+        return f"Top accounts for {result['period_name']}: {highlights}"
     if api_path == "/api/db/balance/diagnostics":
         return json.dumps(result)
     return result.get("message", "No database result was needed.")
@@ -1031,7 +1070,7 @@ def health():
 
     return jsonify(
         {
-            "openai_configured": bool(OPENAI_API_KEY),
+            "providers_supported": ["openai", "anthropic", "gemini"],
             "openai_model": OPENAI_MODEL,
             "db_connected": db_ok,
             "db_error": db_error,
@@ -1108,6 +1147,9 @@ def chat():
     payload = request.get_json(silent=True) or {}
     message = (payload.get("message") or "").strip()
     history = payload.get("history") or []
+    api_key = (payload.get("api_key") or "").strip()
+    provider = (payload.get("provider") or "openai").lower()
+    
     if not message:
         return jsonify({"error": "Message is required."}), 400
 
@@ -1117,7 +1159,7 @@ def chat():
 
     try:
         started = time.perf_counter()
-        routed = resolve_question_with_llm(full_history, message)
+        routed = resolve_question_with_llm(full_history, message, provider, api_key)
         timings["route_ms"] = round((time.perf_counter() - started) * 1000, 1)
     except requests.HTTPError as exc:
         detail = exc.response.text if exc.response is not None else str(exc)

@@ -52,8 +52,16 @@
         <form class="composer" id="chat-form">
           <label class="sr-only" for="message">Message</label>
           <textarea id="message" name="message" rows="3" placeholder="Ask about balances or API usage..." required></textarea>
+          <div class="settings-row" style="margin-bottom: 15px; display: flex; gap: 10px;">
+            <select id="provider" name="provider" style="padding: 8px; border-radius: 4px; border: 1px solid #ccc;">
+              <option value="openai">OpenAI</option>
+              <option value="anthropic">Claude</option>
+              <option value="gemini">Gemini</option>
+            </select>
+            <input type="password" id="api_key" name="api_key" placeholder="Enter API Key" style="flex: 1; padding: 8px; border-radius: 4px; border: 1px solid #ccc;" required>
+          </div>
           <div class="composer-row">
-            <p class="helper-text">The API key stays on the server in <code>OPENAI_API_KEY</code>.</p>
+            <p class="helper-text">Your API key is sent securely step-by-step and is not stored server-side.</p>
             <button type="submit">Send</button>
           </div>
         </form>

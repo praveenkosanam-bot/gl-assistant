@@ -10,7 +10,6 @@ Suite Teardown    Cleanup Assistant Suite
 ${APP_URL}                 http://127.0.0.1:5123
 ${APP_PORT}                5123
 ${LEDGER_NAME}             US Primary Ledger
-${LEDGER_ID}               300000046975971
 ${PERIOD_NAME}             01-23
 ${COMPARE_PERIOD}          02-23
 ${ACTUAL_FLAG}             A
@@ -18,83 +17,63 @@ ${ACCOUNT_NUMBER}          11200
 ${TREND_LENGTH}            4
 
 *** Test Cases ***
-Question Inventory CCID Period Routes To CCID API
-    ${payload}=    Create Dictionary    message=What is the balance for CCID ${CCID} in ${PERIOD_NAME} on ledger ${LEDGER_ID}?    history=${EMPTY_HISTORY}
-    ${response}=    Call Assistant API    ${payload}
-    Should Be Equal As Integers    ${response}[status]    200
-    Should Be Equal    ${response}[body][routing][api_path]    /api/db/balance/by-ccid
-    Should Be Equal As Integers    ${response}[body][db_result][ccid]    ${CCID}
-    Should Not Be Equal    ${response}[body][db_result][ytd_balance]    ${None}
-
-Question Inventory CCID YTD Routes To CCID API
-    ${payload}=    Create Dictionary    message=Show actual YTD for CCID ${CCID} in ${PERIOD_NAME} on ledger ${LEDGER_ID}.    history=${EMPTY_HISTORY}
-    ${response}=    Call Assistant API    ${payload}
-    Should Be Equal    ${response}[body][routing][api_path]    /api/db/balance/by-ccid
-    Should Contain    ${response}[body][reply]    CCID ${CCID}
-
 Question Inventory Segments Period Routes To Account API
-    ${payload}=    Create Dictionary    message=What is the balance for 01.200.${ACCOUNT_NUMBER}, ${PERIOD_NAME}, ledger ${LEDGER_ID}?    history=${EMPTY_HISTORY}
+    ${payload}=    Create Dictionary    message=What is the balance for 01.200.${ACCOUNT_NUMBER}, ${PERIOD_NAME}, ${LEDGER_NAME}?    history=${EMPTY_HISTORY}
     ${response}=    Call Assistant API    ${payload}
     Should Be Equal    ${response}[body][routing][api_path]    /api/db/balance/by-account
     Should Be Equal    ${response}[body][db_result][account_number]    ${ACCOUNT_NUMBER}
     Should Not Be Equal    ${response}[body][db_result][period_activity]    ${None}
 
 Question Inventory Diff Routes To Diff API
-    ${payload}=    Create Dictionary    message=Compare ${PERIOD_NAME} vs ${COMPARE_PERIOD} for account ${ACCOUNT_NUMBER} on ledger ${LEDGER_ID}.    history=${EMPTY_HISTORY}
+    ${payload}=    Create Dictionary    message=Compare ${PERIOD_NAME} vs ${COMPARE_PERIOD} for account ${ACCOUNT_NUMBER} on ${LEDGER_NAME}.    history=${EMPTY_HISTORY}
     ${response}=    Call Assistant API    ${payload}
     Should Be Equal    ${response}[body][routing][api_path]    /api/db/balance/diff
     Dictionary Should Contain Key    ${response}[body][db_result]    ytd_delta
     Dictionary Should Contain Key    ${response}[body][db_result]    period_activity_delta
 
 Question Inventory Trend Routes To Trend API
-    ${payload}=    Create Dictionary    message=Show last ${TREND_LENGTH} periods for account ${ACCOUNT_NUMBER} on ledger ${LEDGER_ID}.    history=${EMPTY_HISTORY}
+    ${payload}=    Create Dictionary    message=Show last ${TREND_LENGTH} periods for account ${ACCOUNT_NUMBER} on ${LEDGER_NAME}.    history=${EMPTY_HISTORY}
     ${response}=    Call Assistant API    ${payload}
     Should Be Equal    ${response}[body][routing][api_path]    /api/db/balance/trend
     ${periods}=    Get From Dictionary    ${response}[body][db_result]    periods
     Length Should Be    ${periods}    ${TREND_LENGTH}
 
 Question Inventory Explain Routes To Explain API
-    ${payload}=    Create Dictionary    message=Explain how the balance for CCID ${CCID} in ${PERIOD_NAME} was calculated for ledger ${LEDGER_ID}.    history=${EMPTY_HISTORY}
+    ${payload}=    Create Dictionary    message=Explain how the balance for Account ${ACCOUNT_NUMBER} in ${PERIOD_NAME} was calculated for ${LEDGER_NAME}.    history=${EMPTY_HISTORY}
     ${response}=    Call Assistant API    ${payload}
     Should Be Equal    ${response}[body][routing][api_path]    /api/db/balance/explain
     Dictionary Should Contain Key    ${response}[body][db_result]    begin_balance_dr
     Dictionary Should Contain Key    ${response}[body][db_result]    period_net_cr
 
-Question Inventory Diagnostic Routes To Diagnostics API
-    ${payload}=    Create Dictionary    message=Why is the balance null for CCID ${CCID} in ${PERIOD_NAME} on ledger ${LEDGER_ID}?    history=${EMPTY_HISTORY}
-    ${response}=    Call Assistant API    ${payload}
-    Should Be Equal    ${response}[body][routing][api_path]    /api/db/balance/diagnostics
-    Dictionary Should Contain Key    ${response}[body][db_result]    balance_row_exists
-
 Question Inventory High Level Routes To Highlights API
-    ${payload}=    Create Dictionary    message=Show accounts with high balances in ${PERIOD_NAME} for ledger ${LEDGER_ID}.    history=${EMPTY_HISTORY}
+    ${payload}=    Create Dictionary    message=Show accounts with high balances in ${PERIOD_NAME} for ${LEDGER_NAME}.    history=${EMPTY_HISTORY}
     ${response}=    Call Assistant API    ${payload}
     Should Be Equal    ${response}[body][routing][api_path]    /api/db/balance/highlights
     ${top_accounts}=    Get From Dictionary    ${response}[body][db_result]    top_accounts
     Should Not Be Empty    ${top_accounts}
 
 Journal Question Is Marked Unsupported
-    ${payload}=    Create Dictionary    message=Show journals for CCID ${CCID} in ${PERIOD_NAME}.    history=${EMPTY_HISTORY}
+    ${payload}=    Create Dictionary    message=Show journals for Account ${ACCOUNT_NUMBER} in ${PERIOD_NAME}.    history=${EMPTY_HISTORY}
     ${response}=    Call Assistant API    ${payload}
     Should Be Equal    ${response}[body][routing][api_path]    /api/db/unsupported
     Should Contain    ${response}[body][reply]    not implemented yet
 
 Lightweight NLP Parse Returns Intent And Route
-    ${payload}=    Create Dictionary    message=Compare ${PERIOD_NAME} vs ${COMPARE_PERIOD} for account ${ACCOUNT_NUMBER} on ledger ${LEDGER_ID}.
+    ${payload}=    Create Dictionary    message=Compare ${PERIOD_NAME} vs ${COMPARE_PERIOD} for account ${ACCOUNT_NUMBER} on ${LEDGER_NAME}.
     ${response}=    Call JSON API    POST    ${APP_URL}/api/nlu/parse    ${payload}
     Should Be Equal As Integers    ${response}[status]    200
     Should Be Equal    ${response}[body][lightweight][intent]    balance.diff.two_periods
     Should Be Equal    ${response}[body][routing][api_path]    /api/db/balance/diff
 
 Direct Account DB API Returns Balance
-    ${payload}=    Create Dictionary    ledger_id=${LEDGER_ID}    period_name=${PERIOD_NAME}    account_number=${ACCOUNT_NUMBER}    actual_flag=${ACTUAL_FLAG}
+    ${payload}=    Create Dictionary    period_name=${PERIOD_NAME}    account_number=${ACCOUNT_NUMBER}    actual_flag=${ACTUAL_FLAG}
     ${response}=    Call JSON API    POST    ${APP_URL}/api/db/balance/by-account    ${payload}
     Should Be Equal As Integers    ${response}[status]    200
     Should Be Equal    ${response}[body][account_number]    ${ACCOUNT_NUMBER}
     Should Not Be Equal    ${response}[body][ytd_balance]    ${None}
 
 Direct Trend DB API Returns Requested Count
-    ${payload}=    Create Dictionary    ledger_id=${LEDGER_ID}    account_number=${ACCOUNT_NUMBER}    actual_flag=${ACTUAL_FLAG}    n=${TREND_LENGTH}    period_name=${COMPARE_PERIOD}
+    ${payload}=    Create Dictionary    account_number=${ACCOUNT_NUMBER}    actual_flag=${ACTUAL_FLAG}    n=${TREND_LENGTH}    period_name=${COMPARE_PERIOD}
     ${response}=    Call JSON API    POST    ${APP_URL}/api/db/balance/trend    ${payload}
     Should Be Equal As Integers    ${response}[status]    200
     ${periods}=    Get From Dictionary    ${response}[body]    periods
@@ -103,11 +82,9 @@ Direct Trend DB API Returns Requested Count
 *** Keywords ***
 Initialize Assistant Suite
     Connect To Oracle
-    ${rows}=    Query    SELECT gb.code_combination_id FROM gl_balances gb JOIN gl_code_combinations gcc ON gcc.code_combination_id = gb.code_combination_id WHERE gb.ledger_id = ${LEDGER_ID} AND gb.period_name = '${PERIOD_NAME}' AND gb.actual_flag = '${ACTUAL_FLAG}' AND gcc.segment3 = '${ACCOUNT_NUMBER}' FETCH FIRST 1 ROWS ONLY
+    ${rows}=    Query    SELECT gb.code_combination_id FROM gl_balances gb JOIN gl_code_combinations gcc ON gcc.code_combination_id = gb.code_combination_id WHERE gb.period_name = '${PERIOD_NAME}' AND gb.actual_flag = '${ACTUAL_FLAG}' AND gcc.segment3 = '${ACCOUNT_NUMBER}' FETCH FIRST 1 ROWS ONLY
     Should Not Be Empty    ${rows}
-    ${seed}=    Set Variable    ${rows[0]}
-    Set Suite Variable    ${CCID}    ${seed[0]}
-    ${compare_rows}=    Query    SELECT 1 FROM gl_balances gb JOIN gl_code_combinations gcc ON gcc.code_combination_id = gb.code_combination_id WHERE gb.ledger_id = ${LEDGER_ID} AND gb.period_name = '${COMPARE_PERIOD}' AND gb.actual_flag = '${ACTUAL_FLAG}' AND gcc.segment3 = '${ACCOUNT_NUMBER}' FETCH FIRST 1 ROWS ONLY
+    ${compare_rows}=    Query    SELECT 1 FROM gl_balances gb JOIN gl_code_combinations gcc ON gcc.code_combination_id = gb.code_combination_id WHERE gb.period_name = '${COMPARE_PERIOD}' AND gb.actual_flag = '${ACTUAL_FLAG}' AND gcc.segment3 = '${ACCOUNT_NUMBER}' FETCH FIRST 1 ROWS ONLY
     Should Not Be Empty    ${compare_rows}
     ${empty_history}=    Create List
     Set Suite Variable    ${EMPTY_HISTORY}    ${empty_history}
