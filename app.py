@@ -1387,30 +1387,35 @@ def chat():
         return jsonify({"error": str(exc)}), 500
 
     api_path = routed["api_path"]
+    params = routed.get("params") or {}
+    
     if api_path == "/api/db/none":
-        result = dispatch_db_api(api_path, routed.get("params") or {})
+        result = dispatch_db_api(api_path, params)
         reply = format_chat_reply(api_path, result)
         return jsonify({"reply": reply, "routing": routed, "db_result": None, "timings": timings})
-    elif routed["api_path"] == "/api/db/unsupported":
+        
+    if api_path == "/api/db/unsupported":
         db_result = {"reason": routed.get("reason", "Endpoint unsupported.")}
-        reply = format_chat_reply(routed["api_path"], db_result)
-    elif routed["api_path"] == "/api/db/journal/details":
+        reply = format_chat_reply(api_path, db_result)
+        return jsonify({"reply": reply, "routing": routed, "db_result": None, "timings": timings})
+
+    if api_path == "/api/db/journal/details":
         db_result = db_journal_details(params)
         msg = db_result.get("drill_status_msg", "")
         clob = db_result.get("raw_drill_clob", "")
-        if not clob and "error" in msg.lower():
-            reply = f"Error drilling into journals for {db_result['account_number']}: {msg}"
+        if not clob and "error" in (msg or "").lower():
+            reply = f"Error drilling into journals for {db_result.get('account_number')}: {msg}"
         else:
             reply = f"Journal Drilldown completed. Detailed payload generated internally (length: {(len(clob) if clob else 0)} chars)."
-    return jsonify({"reply": reply, "routing": routed, "db_result": None, "timings": timings})
+        return jsonify({"reply": reply, "routing": routed, "db_result": db_result, "timings": timings})
 
-    validation_error = validate_route_params(api_path, routed.get("params") or {})
+    validation_error = validate_route_params(api_path, params)
     if validation_error:
         return jsonify({"error": validation_error, "routing": routed}), 400
 
     try:
         started = time.perf_counter()
-        result = dispatch_db_api(api_path, routed.get("params") or {})
+        result = dispatch_db_api(api_path, params)
         timings["db_api_ms"] = round((time.perf_counter() - started) * 1000, 1)
         reply = format_chat_reply(api_path, result)
     except Exception as exc:
