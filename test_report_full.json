@@ -1,0 +1,371 @@
+[
+  {
+    "intent": "balance.lookup.segments.period",
+    "question": "What is the balance for Account 16160 in 03-23?",
+    "status": 200,
+    "api_path": "/api/db/balance/by-account",
+    "classification": "ANSWERED",
+    "reply_excerpt": "Account 16160 in US Primary Ledger for 03-23 has YTD balance $8,808,652,533.46 and period activity -",
+    "elapsed_ms": 460
+  },
+  {
+    "intent": "balance.lookup.segments.period",
+    "question": "Show period balance for 16160, 03-23.",
+    "status": 200,
+    "api_path": "/api/db/balance/by-account",
+    "classification": "ANSWERED",
+    "reply_excerpt": "Account 16160 in US Primary Ledger for 03-23 has YTD balance $8,808,652,533.46 and period activity -",
+    "elapsed_ms": 390
+  },
+  {
+    "intent": "balance.lookup.segments.period",
+    "question": "Give me the balance of 16160 this period (03-23).",
+    "status": 200,
+    "api_path": "/api/db/balance/by-account",
+    "classification": "ANSWERED",
+    "reply_excerpt": "Account 16160 in US Primary Ledger for 03-23 has YTD balance $8,808,652,533.46 and period activity -",
+    "elapsed_ms": 386
+  },
+  {
+    "intent": "balance.lookup.segments.period",
+    "question": "Balance for 16160 in 03-23 on US Primary Ledger.",
+    "status": 200,
+    "api_path": "/api/db/balance/by-account",
+    "classification": "ANSWERED",
+    "reply_excerpt": "Account 16160 in US Primary Ledger for 03-23 has YTD balance $8,808,652,533.46 and period activity -",
+    "elapsed_ms": 589
+  },
+  {
+    "intent": "balance.lookup.segments.period",
+    "question": "Ending balance for Account 16160 in 02-23.",
+    "status": 200,
+    "api_path": "/api/db/balance/by-account",
+    "classification": "ANSWERED",
+    "reply_excerpt": "Account 16160 in US Primary Ledger for 02-23 has YTD balance $8,808,844,675.42 and period activity -",
+    "elapsed_ms": 475
+  },
+  {
+    "intent": "balance.lookup.segments.period",
+    "question": "Fetch actual balance for US Primary Ledger, period 03-23, Account 16160.",
+    "status": 200,
+    "api_path": "/api/db/balance/by-account",
+    "classification": "ANSWERED",
+    "reply_excerpt": "Account 16160 in US Primary Ledger for 03-23 has YTD balance $8,808,652,533.46 and period activity -",
+    "elapsed_ms": 503
+  },
+  {
+    "intent": "balance.lookup.segments.period",
+    "question": "Show balance for Company 942, Dept 90, Account 16160 in 02-23.",
+    "status": 200,
+    "api_path": "/api/db/balance/by-account",
+    "classification": "ANSWERED",
+    "reply_excerpt": "Account 16160 in US Primary Ledger for 02-23 has YTD balance $8,808,844,675.42 and period activity -",
+    "elapsed_ms": 736
+  },
+  {
+    "intent": "balance.lookup.segments.period",
+    "question": "Get 942-90-16160 in 03-23.",
+    "status": 400,
+    "api_path": "N/A",
+    "classification": "ERROR",
+    "reply_excerpt": "",
+    "elapsed_ms": 19
+  },
+  {
+    "intent": "balance.lookup.segments.period",
+    "question": "Balance for company 942 account 16160 this period.",
+    "status": 200,
+    "api_path": "/api/db/balance/by-account",
+    "classification": "ANSWERED",
+    "reply_excerpt": "Account 16160 in US Primary Ledger for 01-22 has YTD balance $8,819,175,478.21 and period activity -",
+    "elapsed_ms": 351
+  },
+  {
+    "intent": "balance.lookup.segments.period",
+    "question": "What is the YTD for Account 16160?",
+    "status": 200,
+    "api_path": "/api/db/balance/by-account",
+    "classification": "ANSWERED",
+    "reply_excerpt": "Account 16160 in US Primary Ledger for 01-22 has YTD balance $8,819,175,478.21 and period activity -",
+    "elapsed_ms": 264
+  },
+  {
+    "intent": "balance.lookup.segments.period",
+    "question": "Give me YTD balance for 16160 in 03-23.",
+    "status": 200,
+    "api_path": "/api/db/balance/by-account",
+    "classification": "ANSWERED",
+    "reply_excerpt": "Account 16160 in US Primary Ledger for 03-23 has YTD balance $8,808,652,533.46 and period activity -",
+    "elapsed_ms": 415
+  },
+  {
+    "intent": "balance.lookup.segments.period",
+    "question": "YTD on 16160, US Primary Ledger.",
+    "status": 200,
+    "api_path": "/api/db/balance/by-account",
+    "classification": "ANSWERED",
+    "reply_excerpt": "Account 16160 in US Primary Ledger for 01-22 has YTD balance $8,819,175,478.21 and period activity -",
+    "elapsed_ms": 181
+  },
+  {
+    "intent": "balance.lookup.segments.period",
+    "question": "Show actual YTD for 16160.",
+    "status": 200,
+    "api_path": "/api/db/balance/by-account",
+    "classification": "ANSWERED",
+    "reply_excerpt": "Account 16160 in US Primary Ledger for 01-22 has YTD balance $8,819,175,478.21 and period activity -",
+    "elapsed_ms": 245
+  },
+  {
+    "intent": "balance.diff.two_periods",
+    "question": "Compare 01-23 vs 02-23 for Account 16160.",
+    "status": 200,
+    "api_path": "/api/db/balance/diff",
+    "classification": "ZERO_BALANCE",
+    "reply_excerpt": "For account 16160, YTD changed by -$11,687.52 between 01-23 and 02-23. Period activity changed by $1",
+    "elapsed_ms": 1009
+  },
+  {
+    "intent": "balance.diff.two_periods",
+    "question": "What changed between 01-23 and 02-23 on 16160?",
+    "status": 400,
+    "api_path": "N/A",
+    "classification": "ERROR",
+    "reply_excerpt": "",
+    "elapsed_ms": 17
+  },
+  {
+    "intent": "balance.diff.two_periods",
+    "question": "\u00ce\u201d for 942-90-16160 between 02-23 and 03-23.",
+    "status": 400,
+    "api_path": "N/A",
+    "classification": "ERROR",
+    "reply_excerpt": "",
+    "elapsed_ms": 14
+  },
+  {
+    "intent": "balance.diff.two_periods",
+    "question": "Show month-on-month change for Account 16160 (01-23 to 02-23).",
+    "status": 400,
+    "api_path": "N/A",
+    "classification": "ERROR",
+    "reply_excerpt": "",
+    "elapsed_ms": 8
+  },
+  {
+    "intent": "balance.trend.last_n",
+    "question": "Show last 5 periods for Account 16160.",
+    "status": 200,
+    "api_path": "/api/db/balance/trend",
+    "classification": "ZERO_BALANCE",
+    "reply_excerpt": "Trend: 10-21: -$1,837,128,197.56; 11-21: -$1,856,204,556.25; 12-21: -$1,852,855,605.51; Adj-21: -$1,",
+    "elapsed_ms": 85
+  },
+  {
+    "intent": "balance.trend.last_n",
+    "question": "Trend for last 6 months on account 16160.",
+    "status": 200,
+    "api_path": "/api/db/balance/trend",
+    "classification": "ZERO_BALANCE",
+    "reply_excerpt": "Trend: 09-21: -$1,817,459,747.91; 10-21: -$1,837,128,197.56; 11-21: -$1,856,204,556.25; 12-21: -$1,8",
+    "elapsed_ms": 73
+  },
+  {
+    "intent": "balance.trend.last_n",
+    "question": "Give me the 4-period history for 16160.",
+    "status": 200,
+    "api_path": "/api/db/balance/trend",
+    "classification": "ZERO_BALANCE",
+    "reply_excerpt": "Trend: 10-21: -$1,837,128,197.56; 11-21: -$1,856,204,556.25; 12-21: -$1,852,855,605.51; Adj-21: -$1,",
+    "elapsed_ms": 80
+  },
+  {
+    "intent": "balance.trend.last_n",
+    "question": "How has 16160 trended recently?",
+    "status": 500,
+    "api_path": "N/A",
+    "classification": "ERROR",
+    "reply_excerpt": "",
+    "elapsed_ms": 26
+  },
+  {
+    "intent": "balance.type.override",
+    "question": "Budget balance for 942-90-16160 in 03-23.",
+    "status": 200,
+    "api_path": "/api/db/balance/by-account",
+    "classification": "ANSWERED",
+    "reply_excerpt": "Account 16160 in US Primary Ledger for 03-23 has YTD balance $8,808,652,533.46 and period activity -",
+    "elapsed_ms": 835
+  },
+  {
+    "intent": "balance.type.override",
+    "question": "Encumbrance amount for Account 16160 this period.",
+    "status": 200,
+    "api_path": "/api/db/balance/by-account",
+    "classification": "ANSWERED",
+    "reply_excerpt": "Account 16160 in US Primary Ledger for 01-22 has YTD balance $8,819,175,478.21 and period activity -",
+    "elapsed_ms": 288
+  },
+  {
+    "intent": "balance.type.override",
+    "question": "Actuals for 16160 in 02-23.",
+    "status": 400,
+    "api_path": "N/A",
+    "classification": "ERROR",
+    "reply_excerpt": "",
+    "elapsed_ms": 22
+  },
+  {
+    "intent": "balance.type.override",
+    "question": "Show budget YTD for 942.90.16160.",
+    "status": 200,
+    "api_path": "/api/db/balance/by-account",
+    "classification": "ANSWERED",
+    "reply_excerpt": "Account 16160 in US Primary Ledger for 01-22 has YTD balance $8,819,175,478.21 and period activity -",
+    "elapsed_ms": 346
+  },
+  {
+    "intent": "balance.currency.override",
+    "question": "Show balance for 16160 in USD for 03-23.",
+    "status": 200,
+    "api_path": "/api/db/balance/by-account",
+    "classification": "ANSWERED",
+    "reply_excerpt": "Account 16160 in US Primary Ledger for 03-23 has YTD balance $8,808,652,533.46 and period activity -",
+    "elapsed_ms": 639
+  },
+  {
+    "intent": "balance.currency.override",
+    "question": "Convert Account 16160 to ledger currency in 02-23.",
+    "status": 200,
+    "api_path": "/api/db/balance/by-account",
+    "classification": "ANSWERED",
+    "reply_excerpt": "Account 16160 in US Primary Ledger for 02-23 has YTD balance $8,808,844,675.42 and period activity -",
+    "elapsed_ms": 588
+  },
+  {
+    "intent": "balance.currency.override",
+    "question": "Give foreign currency balance for 16160 (EUR).",
+    "status": 200,
+    "api_path": "/api/db/balance/by-ccid",
+    "classification": "ANSWERED",
+    "reply_excerpt": "CCID 300000047428567 in US Primary Ledger for 01-22 has YTD balance $8,819,175,478.21 and period act",
+    "elapsed_ms": 193
+  },
+  {
+    "intent": "balance.explain.calculation",
+    "question": "Explain how the balance for 16160 in 03-23 was calculated.",
+    "status": 200,
+    "api_path": "/api/db/balance/explain",
+    "classification": "ANSWERED",
+    "reply_excerpt": "YTD $632,281,448,241.09 = begin DR $1,163,806,568,366.12 - begin CR $531,524,927,983.07 + period DR ",
+    "elapsed_ms": 22
+  },
+  {
+    "intent": "balance.explain.calculation",
+    "question": "Break down begin balance and period activity for 942-90-16160.",
+    "status": 200,
+    "api_path": "/api/db/balance/explain",
+    "classification": "ANSWERED",
+    "reply_excerpt": "YTD -$1,862,606,146.87 = begin DR $85,632,832,932.00 - begin CR $87,485,688,537.51 + period DR $9,30",
+    "elapsed_ms": 63
+  },
+  {
+    "intent": "balance.explain.calculation",
+    "question": "Show debit/credit breakdown for Account 16160 this period.",
+    "status": 200,
+    "api_path": "/api/db/balance/explain",
+    "classification": "ANSWERED",
+    "reply_excerpt": "YTD -$1,862,606,146.87 = begin DR $85,632,832,932.00 - begin CR $87,485,688,537.51 + period DR $9,30",
+    "elapsed_ms": 47
+  },
+  {
+    "intent": "balance.high_level",
+    "question": "What does our GL look like this month?",
+    "status": 400,
+    "api_path": "N/A",
+    "classification": "ERROR",
+    "reply_excerpt": "",
+    "elapsed_ms": 10
+  },
+  {
+    "intent": "balance.high_level",
+    "question": "Show accounts with high balances in 03-23.",
+    "status": 200,
+    "api_path": "/api/db/balance/highlights",
+    "classification": "ZERO_BALANCE",
+    "reply_excerpt": "Top accounts for 03-23: 33100 (YTD: -$1,554,247,679,495.00, Activity: $0.00), 15110 (YTD: $1,259,472",
+    "elapsed_ms": 231
+  },
+  {
+    "intent": "balance.high_level",
+    "question": "Which accounts changed the most this period?",
+    "status": 400,
+    "api_path": "N/A",
+    "classification": "ERROR",
+    "reply_excerpt": "",
+    "elapsed_ms": 6695
+  },
+  {
+    "intent": "balance.high_level",
+    "question": "Anything unusual in the GL this month?",
+    "status": 400,
+    "api_path": "N/A",
+    "classification": "ERROR",
+    "reply_excerpt": "",
+    "elapsed_ms": 5
+  },
+  {
+    "intent": "journals.lookup.basic",
+    "question": "Show journals for Account 16160 in 02-23.",
+    "status": 200,
+    "api_path": "/api/db/journal/details",
+    "classification": "ZERO_BALANCE",
+    "reply_excerpt": "Journal Drilldown completed. Detailed payload generated internally (length: 0 chars).",
+    "elapsed_ms": 105
+  },
+  {
+    "intent": "journals.lookup.basic",
+    "question": "Get all posted journals for 03-23 for 942-90-16160.",
+    "status": 200,
+    "api_path": "/api/db/journal/details",
+    "classification": "ZERO_BALANCE",
+    "reply_excerpt": "Journal Drilldown completed. Detailed payload generated internally (length: 0 chars).",
+    "elapsed_ms": 203
+  },
+  {
+    "intent": "journals.lookup.basic",
+    "question": "What journals hit 16160 this period?",
+    "status": 200,
+    "api_path": "/api/db/journal/details",
+    "classification": "ZERO_BALANCE",
+    "reply_excerpt": "Journal Drilldown completed. Detailed payload generated internally (length: 0 chars).",
+    "elapsed_ms": 176
+  },
+  {
+    "intent": "journals.summary.by_source",
+    "question": "Journal totals by source (Manual vs Payables) for 03-23.",
+    "status": 200,
+    "api_path": "/api/db/journal/details",
+    "classification": "ZERO_BALANCE",
+    "reply_excerpt": "Journal Drilldown completed. Detailed payload generated internally (length: 0 chars).",
+    "elapsed_ms": 131
+  },
+  {
+    "intent": "journals.summary.by_source",
+    "question": "Show journal summary by category in 02-23.",
+    "status": 200,
+    "api_path": "/api/db/unsupported",
+    "classification": "UNSUPPORTED",
+    "reply_excerpt": "No database result was needed.",
+    "elapsed_ms": 21
+  },
+  {
+    "intent": "journals.summary.by_source",
+    "question": "How much came from Payables this month?",
+    "status": 200,
+    "api_path": "/api/db/journal/details",
+    "classification": "ZERO_BALANCE",
+    "reply_excerpt": "Journal Drilldown completed. Detailed payload generated internally (length: 0 chars).",
+    "elapsed_ms": 387
+  }
+]

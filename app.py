@@ -389,10 +389,19 @@ def extract_filters(message: str) -> dict[str, Any]:
         if (" VS " in upper_message or " VERSUS " in upper_message) and len(inline_periods) >= 2:
             results["period_from"] = inline_periods[0].upper()
             results["period_to"] = inline_periods[1].upper()
+        # Pattern like "01-23 to 02-23" or "01-23 and 02-23" without keyword
+        elif len(inline_periods) >= 2:
+            diff_triggers = re.search(r"\b(change|changed|vs\.?|compare|between|delta|month.on.month)\b", message, re.IGNORECASE)
+            if diff_triggers:
+                results["period_from"] = inline_periods[0].upper()
+                results["period_to"] = inline_periods[1].upper()
 
     last_n_match = re.search(patterns["last_n"], message, re.IGNORECASE)
     if last_n_match:
         results["n"] = int(last_n_match.group(1))
+    elif re.search(r"\b(\d+)[- ]period\b", message, re.IGNORECASE):
+        m = re.search(r"\b(\d+)[- ]period\b", message, re.IGNORECASE)
+        results["n"] = int(m.group(1))
 
     for key, pattern in patterns.items():
         if key in {"period_from", "last_n"}:
@@ -410,22 +419,56 @@ def extract_filters(message: str) -> dict[str, Any]:
         else:
             results[key] = value
 
+    # ---- Shorthand segment notation: 942-90-16160 or 942.90.16160 ----
     if "account_number" not in results:
-        seg_match = re.search(r"\b\d{2}[.\-]\d{3}[.\-](\d{4,6})\b", message)
+        seg_match = re.search(r"\b(\d{2,3})[.\-](\d{2,3})[.\-](\d{4,6})\b", message)
         if seg_match:
-            results["account_number"] = seg_match.group(1)
+            results["account_number"] = seg_match.group(3)   # account is the 3rd segment
+            if "company" not in results:
+                results["company"] = seg_match.group(1)
+            if "department" not in results:
+                results["department"] = seg_match.group(2)
+
     if "account_number" not in results and "ccid" not in results:
         lower_message = message.lower()
-        if any(token in lower_message for token in ("balance", "account", "period", "ytd", "activity")):
-            bare_number_match = re.search(r"\b(\d{4,6})\b", message)
+        if any(token in lower_message for token in ("balance", "account", "period", "ytd", "activity", "actuals", "budget", "encumbrance", "trend", "journal")):
+            # Only grab bare numbers that look like account codes (4-6 digits)
+            bare_number_match = re.search(r"(?<!\d)(\d{4,6})(?!\d)", message)
             if bare_number_match:
                 results["account_number"] = bare_number_match.group(1)
 
-    if "activity" in message.lower():
+    # ---- actual_flag keywords ----
+    lower_message = message.lower()
+    if "actual_flag" not in results:
+        if re.search(r"\bactuals?\b", lower_message):
+            results["actual_flag"] = "A"
+        elif re.search(r"\bbudget\b", lower_message):
+            results["actual_flag"] = "B"
+        elif re.search(r"\bencumbrance\b", lower_message):
+            results["actual_flag"] = "E"
+
+    # ---- Relative period references ----
+    if "period_name" not in results and "period_from" not in results:
+        # Query the DB for the latest period available
+        try:
+            row = query_one(
+                "SELECT MAX(period_name) FROM gl_balances WHERE ledger_id = :lid",
+                {"lid": DEFAULT_LEDGER_ID},
+            )
+            if row and row[0]:
+                latest = str(row[0])
+                if re.search(r"\b(this month|this period|current period|current month)\b", lower_message):
+                    results["period_name"] = latest
+                elif re.search(r"\b(recently|last period|recent)\b", lower_message):
+                    results["period_name"] = latest
+                    results.setdefault("n", 4)
+        except Exception:
+            pass
+
+    if "activity" in lower_message:
         results["sort_by"] = "activity"
 
     if "account_number" not in results:
-        lower_message = message.lower()
         for alias, acct in ACCOUNT_ALIASES.items():
             if re.search(rf"\b{alias}\b", lower_message):
                 results["account_number"] = acct
@@ -1070,27 +1113,38 @@ def resolve_question_rule_based(question: str) -> dict[str, Any]:
     api_path = INTENT_API_MAP.get(parsed["intent"], "/api/db/balance/highlights")
     text = question.lower()
 
-    if "source" in text or "journals" in text or "payables" in text or "posted journals" in text:
-        return {
-            "api_path": "/api/db/journal/details",
-            "params": params,
-        }
+    # ---- Journal routing (highest priority) ----
+    if re.search(r"\b(journals?|payables|posted journals?|journal totals?|journal summary)\b", text):
+        return {"api_path": "/api/db/journal/details", "params": params}
 
-    if "how do i call" in text or "/api/" in text or "javascript" in text or "api" in text:
-        return {"api_path": "/api/db/none", "params": {}, "reason": "This is an API usage question, not a DB query."}
+    # ---- Meta / API questions ----
+    if "how do i call" in text or "/api/" in text or "javascript" in text:
+        return {"api_path": "/api/db/none", "params": {}, "reason": "API usage question."}
 
-    if "trend" in text or "last " in text or "history" in text or "trended" in text:
-        api_path = "/api/db/balance/trend"
-    elif "compare" in text or "changed between" in text or "month-on-month" in text or "Δ" in question or "delta" in text:
+    # ---- Diff / comparison ----
+    if (re.search(r"\b(compare|changed between|month.on.month|delta|what changed)\b", text)
+            or "\u0394" in question      # Greek capital delta
+            or "\u03b4" in question):   # Greek small delta
         api_path = "/api/db/balance/diff"
-    elif "explain" in text or "break down" in text or "breakdown" in text or "debit/credit" in text:
+
+    # ---- Trend ----
+    elif re.search(r"\b(trend|trended|last \d|history|\d+[- ]period|recently)\b", text):
+        api_path = "/api/db/balance/trend"
+
+    # ---- Explain / breakdown ----
+    elif re.search(r"\b(explain|break.?down|breakdown|debit.?credit)\b", text):
         api_path = "/api/db/balance/explain"
-    elif "why" in text or "zero" in text or "null" in text or "exist" in text or "open for this ledger" in text:
+
+    # ---- Diagnostics ----
+    elif re.search(r"\b(why|zero|null|exist|open for this ledger)\b", text):
         api_path = "/api/db/balance/diagnostics"
-    elif "high balances" in text or "changed the most" in text or "unusual" in text or "what does our gl look like" in text or "highest activity" in text or "highest" in text:
+
+    # ---- Highlights / high-level ----
+    elif re.search(r"\b(high balances?|changed the most|unusual|what does our gl|highest activity|highest|look like|anything unusual|show accounts)\b", text):
         params.setdefault("limit", 5)
         api_path = "/api/db/balance/highlights"
 
+    # ---- Account / CCID routing fix-ups ----
     if api_path == "/api/db/balance/by-account" and params.get("account_number") is None and params.get("ccid") is not None:
         api_path = "/api/db/balance/by-ccid"
     if api_path == "/api/db/balance/by-ccid" and params.get("ccid") is None and params.get("account_number") is not None:
@@ -1098,6 +1152,7 @@ def resolve_question_rule_based(question: str) -> dict[str, Any]:
     if api_path == "/api/db/balance/highlights":
         params.setdefault("limit", 5)
 
+    # Clean up any stop-word account_number values
     if params.get("account_number") in ("has", "is", "for", "in", "the", "change", "what", "which"):
         params["account_number"] = None
 
