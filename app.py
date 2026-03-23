@@ -86,8 +86,8 @@ Allowed routes:
 - /api/db/balance/explain
 - /api/db/balance/highlights
 - /api/db/balance/diagnostics
+- /api/db/journal/details
 - /api/db/none
-- /api/db/unsupported
 
 Routing Rules:
 - If the question is about balances for a CCID, route to by-ccid.
@@ -98,11 +98,20 @@ Routing Rules:
 - If it asks why a result is null/zero or whether a CCID exists, use diagnostics.
 - If it asks for high-level GL balance highlights or highest activity, use highlights. Include "sort_by": "activity" in params if activity is requested.
 - If it is an API usage question, use /api/db/none.
-- If it asks about journals, use /api/db/unsupported.
+- If it asks about journals, use /api/db/journal/details.
 - Extract only params that are present or safely inferable.
 - Default actual_flag to A when omitted.
 """
 
+ACCOUNT_ALIASES = {
+    "cash": "11101",
+    "receivables": "12101",
+    "revenue": "41000",
+    "sales": "41000",
+    "payables": "22100",
+    "inventory": "14100",
+    "expenses": "51100"
+}
 BALANCE_KEYWORDS = ("balance", "ccid", "account", "ledger", "period", "ytd", "activity")
 MONTH_MAP = {
     "JAN": 1,
@@ -163,13 +172,167 @@ def query_one(sql: str, params: dict[str, Any] | None = None):
             return cursor.fetchone()
 
 
-def call_balance_procedure(proc_name: str, args: list[Any]) -> tuple[Any, Any]:
+def call_glc_balance(
+    ledger_name: str | None,
+    period_name: str | None,
+    actual_flag: str | None,
+    account_string: str | None,
+    period_type: str = "YTD",
+    currency_code: str = "USD"
+) -> tuple[float | None, str | None]:
+    import random
+    session_id = str(random.randint(1000000, 9999999))
+    sql = """
+    DECLARE
+        l_fields glc_utility.varchar2_tab;
+        l_hier  glc_utility.varchar2_tab;
+        l_bal   NUMBER;
+        l_msg   VARCHAR2(4000);
+    BEGIN
+        glc_utility.init_session(
+            p_session_id => :session_id,
+            p_source_id => 1,
+            p_user_id => -1,
+            p_role => 'ADMIN',
+            p_role_id => 1,
+            p_session_params => NULL
+        );
+
+        l_fields(1) := 'SEGMENT3';
+        glc_balances_pkg.get_balance(
+            p_ledger_name => NVL(:ledger_name, 'US Primary Ledger'),
+            p_period_name => :period_name,
+            p_actual_flag => :actual_flag,
+            p_currency_code => :currency_code,
+            p_period_type => :period_type,
+            p_get_bal_frm => 'R',
+            p_trailing_months => 0,
+            p_debit_credit_flag => NULL,
+            p_entered_flag => 'B',
+            p_period_offset => NULL,
+            p_encumbrance_name => NULL,
+            p_budget_name => NULL,
+            p_gl_account_string => :account_string,
+            p_fields_tbl => l_fields,
+            p_field_hier_tbl => l_hier,
+            p_security_str => NULL,
+            p_session_id => :session_id,
+            p_glc_process_id => 1,
+            p_balance => l_bal,
+            p_message => l_msg
+        );
+        :out_bal := l_bal;
+        :out_msg := l_msg;
+    EXCEPTION WHEN OTHERS THEN
+        :out_bal := NULL;
+        :out_msg := 'GLC_BALANCES_PKG Error: ' || SQLERRM;
+    END;
+    """
     with get_db_connection() as conn:
         with conn.cursor() as cursor:
-            out_number = cursor.var(oracledb.DB_TYPE_NUMBER)
-            out_message = cursor.var(str)
-            cursor.callproc(proc_name, [*args, out_number, out_message])
-            return out_number.getvalue(), out_message.getvalue()
+            out_bal = cursor.var(oracledb.DB_TYPE_NUMBER)
+            out_msg = cursor.var(str)
+            try:
+                cursor.execute(sql, {
+                    "session_id": session_id,
+                    "ledger_name": ledger_name,
+                    "period_name": period_name,
+                    "actual_flag": actual_flag,
+                    "currency_code": currency_code,
+                    "period_type": period_type,
+                    "account_string": account_string,
+                    "out_bal": out_bal,
+                    "out_msg": out_msg,
+                })
+                # Attempt to extract Number types cleanly if returned
+                val = out_bal.getvalue()
+                if val is not None:
+                    return float(val), out_msg.getvalue()
+                return None, out_msg.getvalue()
+            except Exception as e:
+                return None, "Error executing GLC balances: " + str(e)
+
+
+def call_glc_drill(
+    ledger_name: str | None,
+    period_name: str | None,
+    actual_flag: str | None,
+    account_string: str | None,
+    drill_type: str = "journal"
+) -> tuple[str | None, str | None]:
+    import random
+    process_id = random.randint(1000000, 9999999)
+    session_id = str(process_id)
+    sql = """
+    DECLARE
+        l_fields glc_utility.varchar2_tab;
+        l_hier  glc_utility.varchar2_tab;
+        l_filter glc_utility.varchar2_tab;
+        l_msg   VARCHAR2(4000);
+    BEGIN
+        glc_utility.init_session(
+            p_session_id => :session_id,
+            p_source_id => 1,
+            p_user_id => -1,
+            p_role => 'ADMIN',
+            p_role_id => 1,
+            p_session_params => NULL
+        );
+
+        l_fields(1) := 'SEGMENT3';
+        glc_drill_pkg.get_journal_dtl(
+            p_ledger_name => NVL(:ledger_name, 'US Primary Ledger'),
+            p_period_name => :period_name,
+            p_actual_flag => :actual_flag,
+            p_currency_code => 'USD',
+            p_period_type => 'PTD',
+            p_trailing_months => 0,
+            p_debit_credit_flag => NULL,
+            p_entered_flag => 'B',
+            p_gl_account_string => :account_string,
+            p_fields_tbl => l_fields,
+            p_field_hier_tbl => l_hier,
+            p_filter_tbl => l_filter,
+            p_process_id => :process_id,
+            p_glc_process_id => :process_id,
+            p_template_id => 0,
+            p_drill_count => 1,
+            p_message => l_msg
+        );
+        :out_msg := l_msg;
+    EXCEPTION WHEN OTHERS THEN
+        :out_msg := 'GLC_DRILL_PKG Error: ' || SQLERRM;
+    END;
+    """
+    with get_db_connection() as conn:
+        with conn.cursor() as cursor:
+            out_msg = cursor.var(str)
+            try:
+                # Add the base process tracker manually assuming package might assume front-end inserted it
+                try:
+                    cursor.execute("INSERT INTO glc_drill_details (drill_process_id, sub_process_id, start_time) VALUES (:1, :2, sysdate)", [process_id, process_id])
+                except:
+                    pass
+                
+                cursor.execute(sql, {
+                    "session_id": session_id,
+                    "ledger_name": ledger_name,
+                    "period_name": period_name,
+                    "actual_flag": actual_flag,
+                    "account_string": account_string,
+                    "process_id": process_id,
+                    "out_msg": out_msg,
+                })
+                conn.commit()
+                
+                cursor.execute("SELECT drill_details FROM glc_drill_details WHERE drill_process_id = :p AND rownum = 1", {"p": process_id})
+                row = cursor.fetchone()
+                if row and row[0]:
+                    return str(row[0].read()), out_msg.getvalue()
+                return None, out_msg.getvalue()
+            except Exception as e:
+                return None, "Error executing GLC drill: " + str(e)
+
 
 
 def extract_filters(message: str) -> dict[str, Any]:
@@ -206,6 +369,8 @@ def extract_filters(message: str) -> dict[str, Any]:
         if not match:
             continue
         value = match.group(1)
+        if key == "account_number" and value.lower() in ("has", "is", "for", "in", "the", "change", "what", "which", "account"):
+            continue
         if key in {"ledger_id", "ccid"}:
             results[key] = int(value)
         elif key in {"period_name", "actual_flag"}:
@@ -226,6 +391,13 @@ def extract_filters(message: str) -> dict[str, Any]:
 
     if "activity" in message.lower():
         results["sort_by"] = "activity"
+
+    if "account_number" not in results:
+        lower_message = message.lower()
+        for alias, acct in ACCOUNT_ALIASES.items():
+            if re.search(rf"\b{alias}\b", lower_message):
+                results["account_number"] = acct
+                break
 
     return results
 
@@ -405,6 +577,15 @@ def complete_lookup_params(question: str, params: dict[str, Any]) -> dict[str, A
     completed.update(params)
     completed.setdefault("actual_flag", "A")
     completed.setdefault("ledger_id", DEFAULT_LEDGER_ID)
+
+    if completed.get("account_number"):
+        acct_str = str(completed["account_number"]).lower()
+        if not re.fullmatch(r"[\d\.\-]+", acct_str):
+            for alias, acct_id in ACCOUNT_ALIASES.items():
+                if alias in acct_str:
+                    completed["account_number"] = acct_id
+                    break
+
     if completed.get("period_name"):
         completed["period_name"] = normalize_period(completed["period_name"])
     if completed.get("period_from"):
@@ -515,36 +696,54 @@ def annotate_ledger_metadata(result: dict[str, Any]) -> dict[str, Any]:
 
 
 def db_balance_by_ccid(params: dict[str, Any]) -> dict[str, Any]:
-    ytd, ytd_msg = call_balance_procedure(
-        "GLCAI_PKG_BAL.get_ytd_balance_by_ccid",
-        [params["ledger_id"], params["period_name"], params["ccid"], params.get("actual_flag", "A")],
+    ledger_name = get_ledger_name(params["ledger_id"])
+    account_str = str(get_account_for_ccid(params["ccid"]) or params["ccid"])
+    
+    ytd, ytd_msg = call_glc_balance(
+        ledger_name=ledger_name,
+        period_name=params["period_name"],
+        actual_flag=params.get("actual_flag", "A"),
+        account_string=account_str,
+        period_type="YTD"
     )
-    period_activity, activity_msg = call_balance_procedure(
-        "GLCAI_PKG_BAL.get_period_activity_by_ccid",
-        [params["ledger_id"], params["period_name"], params["ccid"], params.get("actual_flag", "A")],
+    period_activity, activity_msg = call_glc_balance(
+        ledger_name=ledger_name,
+        period_name=params["period_name"],
+        actual_flag=params.get("actual_flag", "A"),
+        account_string=account_str,
+        period_type="PTD"
     )
     return {
         "lookup_type": "ccid",
         "ledger_id": params["ledger_id"],
+        "ledger_name": ledger_name,
         "period_name": params["period_name"],
         "ccid": params["ccid"],
-        "account_number": get_account_for_ccid(params["ccid"]),
+        "account_number": account_str,
         "actual_flag": params.get("actual_flag", "A"),
-        "ytd_balance": float(ytd) if ytd is not None else None,
-        "period_activity": float(period_activity) if period_activity is not None else None,
+        "ytd_balance": ytd,
+        "period_activity": period_activity,
         "status_msg": ytd_msg or activity_msg,
         "resolved_from_seed": params.get("resolved_from_seed", False),
     }
 
 
 def db_balance_by_account(params: dict[str, Any]) -> dict[str, Any]:
-    ytd, ytd_msg = call_balance_procedure(
-        "GLCAI_PKG_BAL.get_ytd_balance_by_account",
-        [params["ledger_id"], params["period_name"], params["account_number"], params.get("actual_flag", "A")],
+    ledger_name = get_ledger_name(params["ledger_id"])
+    
+    ytd, ytd_msg = call_glc_balance(
+        ledger_name=ledger_name,
+        period_name=params["period_name"],
+        actual_flag=params.get("actual_flag", "A"),
+        account_string=params["account_number"],
+        period_type="YTD"
     )
-    period_activity, activity_msg = call_balance_procedure(
-        "GLCAI_PKG_BAL.get_period_activity_by_account",
-        [params["ledger_id"], params["period_name"], params["account_number"], params.get("actual_flag", "A")],
+    period_activity, activity_msg = call_glc_balance(
+        ledger_name=ledger_name,
+        period_name=params["period_name"],
+        actual_flag=params.get("actual_flag", "A"),
+        account_string=params["account_number"],
+        period_type="PTD"
     )
     seed = seed_lookup(
         account_number=params["account_number"],
@@ -794,6 +993,27 @@ def db_balance_diagnostics(params: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
+def db_journal_details(params: dict[str, Any]) -> dict[str, Any]:
+    ledger_name = get_ledger_name(params.get("ledger_id", DEFAULT_LEDGER_ID))
+    account_str = params.get("account_number") or str(get_account_for_ccid(params.get("ccid")))
+    
+    clob_result, msg = call_glc_drill(
+        ledger_name=ledger_name,
+        period_name=params.get("period_name"),
+        actual_flag=params.get("actual_flag", "A"),
+        account_string=account_str
+    )
+    
+    return {
+        "ledger_id": params.get("ledger_id"),
+        "ledger_name": ledger_name,
+        "period_name": params.get("period_name"),
+        "account_number": account_str,
+        "raw_drill_clob": clob_result,
+        "drill_status_msg": msg
+    }
+
+
 def extract_output_text(payload: dict[str, Any]) -> str:
     direct_text = payload.get("output_text")
     if direct_text:
@@ -820,9 +1040,8 @@ def resolve_question_rule_based(question: str) -> dict[str, Any]:
 
     if "source" in text or "journals" in text or "payables" in text or "posted journals" in text:
         return {
-            "api_path": "/api/db/unsupported",
+            "api_path": "/api/db/journal/details",
             "params": params,
-            "reason": "Journal endpoints are not implemented yet.",
         }
 
     if "how do i call" in text or "/api/" in text or "javascript" in text or "api" in text:
@@ -1168,10 +1387,22 @@ def chat():
         return jsonify({"error": str(exc)}), 500
 
     api_path = routed["api_path"]
-    if api_path in {"/api/db/none", "/api/db/unsupported"}:
+    if api_path == "/api/db/none":
         result = dispatch_db_api(api_path, routed.get("params") or {})
         reply = format_chat_reply(api_path, result)
         return jsonify({"reply": reply, "routing": routed, "db_result": None, "timings": timings})
+    elif routed["api_path"] == "/api/db/unsupported":
+        db_result = {"reason": routed.get("reason", "Endpoint unsupported.")}
+        reply = format_chat_reply(routed["api_path"], db_result)
+    elif routed["api_path"] == "/api/db/journal/details":
+        db_result = db_journal_details(params)
+        msg = db_result.get("drill_status_msg", "")
+        clob = db_result.get("raw_drill_clob", "")
+        if not clob and "error" in msg.lower():
+            reply = f"Error drilling into journals for {db_result['account_number']}: {msg}"
+        else:
+            reply = f"Journal Drilldown completed. Detailed payload generated internally (length: {(len(clob) if clob else 0)} chars)."
+    return jsonify({"reply": reply, "routing": routed, "db_result": None, "timings": timings})
 
     validation_error = validate_route_params(api_path, routed.get("params") or {})
     if validation_error:
