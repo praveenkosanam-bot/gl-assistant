@@ -26,9 +26,29 @@ function renderStatus(health) {
     items.push(`DB error: ${health.db_error}`);
   }
 
+  // Update provider key status in pills
+  if (health.openai_key_set) items.push("OpenAI Key: Server-side");
+  if (health.anthropic_key_set) items.push("Claude Key: Server-side");
+  if (health.gemini_key_set) items.push("Gemini Key: Server-side");
+
   statusStrip.innerHTML = items
     .map((item) => `<span class="status-pill">${item}</span>`)
     .join("");
+
+  // Update input placeholder based on current provider
+  const providerSelect = document.getElementById("provider");
+  const apiKeyInput = document.getElementById("api_key");
+  
+  const updatePlaceholder = () => {
+    const p = providerSelect.value;
+    const isSet = (p === "openai" && health.openai_key_set) ||
+                  (p === "anthropic" && health.anthropic_key_set) ||
+                  (p === "gemini" && health.gemini_key_set);
+    apiKeyInput.placeholder = isSet ? "Using server-side key (optional override)" : `Enter ${p.charAt(0).toUpperCase() + p.slice(1)} API Key`;
+  };
+
+  providerSelect.onchange = updatePlaceholder;
+  updatePlaceholder();
 }
 
 async function loadHealth() {

@@ -26,6 +26,9 @@ OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses"
 DEFAULT_LEDGER_NAME = os.getenv("DEFAULT_LEDGER_NAME", "US Primary Ledger")
 DEFAULT_LEDGER_ID = int(os.getenv("DEFAULT_LEDGER_ID", "300000046975971"))
 DEFAULT_CURRENCY_SYMBOL = os.getenv("DEFAULT_CURRENCY_SYMBOL", "$")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 DB_CONFIG = {
     "user": os.getenv("DB_USER", "XXSBID_605"),

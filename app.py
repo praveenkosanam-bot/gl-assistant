@@ -28,6 +28,9 @@ def health():
         "mock_openai": core_services.MOCK_OPENAI,
         "rasa_configured": bool(core_services.RASA_URL),
         "question_inventory_loaded": bool(nlu_agent.QUESTION_INVENTORY),
+        "openai_key_set": bool(core_services.OPENAI_API_KEY),
+        "anthropic_key_set": bool(core_services.ANTHROPIC_API_KEY),
+        "gemini_key_set": bool(core_services.GEMINI_API_KEY),
     })
 
 @app.post("/api/nlu/parse")

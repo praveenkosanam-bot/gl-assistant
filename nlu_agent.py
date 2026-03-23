@@ -220,9 +220,21 @@ def resolve_question_rule_based(question: str, history: list[dict[str, str]] | N
     return {"api_path": api_path, "params": params, "intent": parsed["intent"], "intent_confidence": parsed["confidence"], "parser_source": parsed["source"]}
 
 def resolve_question_with_llm(history: list[dict[str, str]], question: str, provider: str, api_key: str) -> dict[str, Any]:
-    if core_services.MOCK_OPENAI or not api_key: return resolve_question_rule_based(question, history)
-    try: rasa_result = parse_question_with_rasa(question)
-    except: rasa_result = None
+    # Use server-side key fallback if no client-side key is provided
+    if not api_key:
+        if provider == "openai":
+            api_key = core_services.OPENAI_API_KEY
+        elif provider == "anthropic":
+            api_key = core_services.ANTHROPIC_API_KEY
+        elif provider == "gemini":
+            api_key = core_services.GEMINI_API_KEY
+
+    if core_services.MOCK_OPENAI or not api_key:
+        return resolve_question_rule_based(question, history)
+    try:
+        rasa_result = parse_question_with_rasa(question)
+    except:
+        rasa_result = None
     if rasa_result and rasa_result.get("intent") in INTENT_API_MAP:
         routed = {"api_path": INTENT_API_MAP[rasa_result["intent"]], "params": complete_lookup_params(question, rasa_result["entities"], history), "intent": rasa_result["intent"], "intent_confidence": rasa_result["confidence"], "parser_source": rasa_result["source"], "routing_mode": "rasa"}
         if routed["api_path"] == "/api/db/balance/highlights": routed["params"].setdefault("limit", 5)
