@@ -1,7 +1,6 @@
 import os
 import time
 from flask import Flask, jsonify, render_template, request
-import requests
 
 import core_services
 import nlu_agent
@@ -13,7 +12,7 @@ app = Flask(__name__)
 
 @app.get("/")
 def index():
-    return render_template("index.html", model=core_services.OPENAI_MODEL)
+    return render_template("index.html", model=core_services.GEMINI_MODEL)
 
 @app.get("/api/health")
 def health():
@@ -25,15 +24,12 @@ def health():
     vectorstore = rag_engine.load_vectorstore()
     rag_doc_count = len((vectorstore or {}).get("documents", []))
     return jsonify({
-        "providers_supported": ["openai", "anthropic", "gemini"],
-        "openai_model": core_services.OPENAI_MODEL,
+        "gemini_model": core_services.GEMINI_MODEL,
         "db_connected": db_ok,
         "db_error": db_error,
-        "mock_openai": core_services.MOCK_OPENAI,
+        "mock_llm": core_services.MOCK_LLM,
         "rasa_configured": bool(core_services.RASA_URL),
         "question_inventory_loaded": bool(nlu_agent.QUESTION_INVENTORY),
-        "openai_key_set": bool(core_services.OPENAI_API_KEY),
-        "anthropic_key_set": bool(core_services.ANTHROPIC_API_KEY),
         "gemini_key_set": bool(core_services.GEMINI_API_KEY),
         "rag_enabled": True,
         "rag_vectorstore_present": bool(vectorstore),
@@ -44,13 +40,14 @@ def health():
 
 @app.post("/api/nlu/parse")
 def api_nlu_parse():
+    import requests as req_lib
     payload = request.get_json(silent=True) or {}
     message = (payload.get("message") or "").strip()
     if not message: return jsonify({"error": "Message is required."}), 400
     rasa_result = None
     if core_services.RASA_URL:
         try: rasa_result = nlu_agent.parse_question_with_rasa(message)
-        except requests.RequestException as exc: rasa_result = {"error": str(exc), "source": "rasa"}
+        except req_lib.RequestException as exc: rasa_result = {"error": str(exc), "source": "rasa"}
     history = payload.get("history") or []
     return jsonify({
         "rasa": rasa_result,
@@ -63,14 +60,12 @@ def chat():
     payload = request.get_json(silent=True) or {}
     message = (payload.get("message") or "").strip()
     history = payload.get("history") or []
-    api_key = (payload.get("api_key") or "").strip()
-    provider = (payload.get("provider") or "openai").lower()
     if not message: return jsonify({"error": "Message is required."}), 400
     full_history = [*history, {"role": "user", "content": message}]
     timings: dict[str, float] = {}
     try:
         started = time.perf_counter()
-        routed = nlu_agent.resolve_question_with_llm(full_history, message, provider, api_key)
+        routed = nlu_agent.resolve_question_with_llm(full_history, message)
         route_duration = (time.perf_counter() - started) * 1000
         timings["route_ms"] = round(route_duration, 1)
         print(f"[API] Routing (LLM) took {route_duration:.1f}ms")
@@ -80,11 +75,11 @@ def chat():
         pms["hierarchy_id"] = payload["hierarchy_id"]
     if path == "/api/db/none":
         res = finance_agent.dispatch_db_api(path, pms)
-        reply = finance_agent.generate_rag_reply(message, path, res, provider, api_key)
+        reply = finance_agent.generate_rag_reply(message, path, res)
         return jsonify({"reply": reply, "routing": routed, "db_result": None, "timings": timings})
     if path == "/api/db/unsupported":
         db_res = {"reason": routed.get("reason", "Endpoint unsupported.")}
-        reply = finance_agent.generate_rag_reply(message, path, db_res, provider, api_key)
+        reply = finance_agent.generate_rag_reply(message, path, db_res)
         return jsonify({"reply": reply, "routing": routed, "db_result": None, "timings": timings})
     if path == "/api/db/journal/details":
         try:
@@ -108,7 +103,7 @@ def chat():
         db_duration = (time.perf_counter() - started) * 1000
         timings["db_api_ms"] = round(db_duration, 1)
         print(f"[API] DB API ({path}) took {db_duration:.1f}ms")
-        r = finance_agent.generate_rag_reply(message, path, res, provider, api_key)
+        r = finance_agent.generate_rag_reply(message, path, res)
     except AmbiguousHierarchyError as exc:
         return jsonify({
             "reply": "I found multiple hierarchies for this field group. Please select one:",
@@ -156,6 +151,68 @@ def api_balance_highlights():
 def api_balance_diagnostics():
     pms = nlu_agent.complete_lookup_params("", request.get_json(silent=True) or {})
     return jsonify(finance_agent.db_balance_diagnostics(pms))
+
+# ── Excel / External Agent Endpoint ──────────────────────────────────────────
+# Call from Excel VBA:
+#   Dim http As Object: Set http = CreateObject("MSXML2.XMLHTTP.6.0")
+#   http.Open "POST", "http://<host>:5000/api/excel/query", False
+#   http.setRequestHeader "Content-Type", "application/json"
+#   http.Send "{""question"":""Balance for 11200 in 01-23""}"
+#   MsgBox http.responseText
+#
+# Call from Power Query:
+#   let src = Web.Contents("http://<host>:5000/api/excel/query",
+#     [Headers=[#"Content-Type"="application/json"],
+#      Content=Text.ToBinary("{""question"":""Balance for 11200 in 01-23""}")])
+#   in Json.Document(src)
+# ─────────────────────────────────────────────────────────────────────────────
+@app.post("/api/excel/query")
+def excel_query():
+    # CORS — allow Excel/Office add-ins and Power Query to call this
+    def _cors(response):
+        response.headers["Access-Control-Allow-Origin"] = "*"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+        return response
+
+    payload = request.get_json(silent=True) or {}
+    question = (payload.get("question") or payload.get("message") or "").strip()
+    history = payload.get("history") or []
+    if not question:
+        return _cors(jsonify({"error": "Provide a 'question' field."})), 400
+
+    full_history = [*history, {"role": "user", "content": question}]
+    try:
+        routed = nlu_agent.resolve_question_with_llm(full_history, question)
+    except Exception as exc:
+        return _cors(jsonify({"error": str(exc)})), 500
+
+    path = routed["api_path"]
+    pms = routed.get("params") or {}
+
+    if path in {"/api/db/none", "/api/db/unsupported"}:
+        res = finance_agent.dispatch_db_api(path, pms)
+        reply = finance_agent.generate_rag_reply(question, path, res)
+        return _cors(jsonify({"reply": reply, "data": None, "route": path}))
+
+    err = nlu_agent.validate_route_params(path, pms)
+    if err:
+        return _cors(jsonify({"error": err, "route": path})), 400
+
+    try:
+        db_res = finance_agent.dispatch_db_api(path, pms)
+        reply = finance_agent.generate_rag_reply(question, path, db_res)
+        return _cors(jsonify({"reply": reply, "data": db_res, "route": path}))
+    except Exception as exc:
+        return _cors(jsonify({"error": str(exc), "route": path})), 500
+
+@app.route("/api/excel/query", methods=["OPTIONS"])
+def excel_query_preflight():
+    resp = jsonify({})
+    resp.headers["Access-Control-Allow-Origin"] = "*"
+    resp.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
+    resp.headers["Access-Control-Allow-Headers"] = "Content-Type"
+    return resp, 204
+
 
 if __name__ == "__main__":
     app.run(

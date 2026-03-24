@@ -14,34 +14,10 @@ If the knowledge base does not support the answer, say so briefly.
 Keep answers short, direct, and useful.
 """
 
-def extract_output_text(payload: dict[str, Any]) -> str:
-    if payload.get("output_text"): return payload["output_text"]
-    texts = []
-    for item in payload.get("output", []):
-        for content in item.get("content", []):
-            if content.get("type") in {"output_text", "text"}:
-                t = content.get("text")
-                if isinstance(t, str): texts.append(t)
-                elif isinstance(t, dict) and t.get("value"): texts.append(t["value"])
-    return "\n".join(texts).strip()
-
-def resolve_provider_key(provider: str, api_key: str | None) -> str | None:
-    if api_key:
-        return api_key
-    if provider == "openai":
-        return core_services.OPENAI_API_KEY
-    if provider == "anthropic":
-        return core_services.ANTHROPIC_API_KEY
-    if provider == "gemini":
-        return core_services.GEMINI_API_KEY
-    return None
-
-def generate_rag_reply(question: str, api_path: str, result: dict[str, Any], provider: str = "gemini", api_key: str = "") -> str:
+def generate_rag_reply(question: str, api_path: str, result: dict[str, Any]) -> str:
     if api_path not in {"/api/db/none", "/api/db/unsupported"}:
         return format_chat_reply(api_path, result)
-    provider = (provider or "gemini").lower()
-    resolved_key = resolve_provider_key(provider, api_key)
-    if not question or not resolved_key:
+    if not question or not core_services.GEMINI_API_KEY:
         return format_chat_reply(api_path, result)
 
     try:
@@ -61,33 +37,14 @@ def generate_rag_reply(question: str, api_path: str, result: dict[str, Any], pro
     )
     session = requests.Session(); session.trust_env = False
     try:
-        if provider == "anthropic":
-            resp = session.post(
-                "https://api.anthropic.com/v1/messages",
-                headers={"x-api-key": resolved_key, "anthropic-version": "2023-06-01", "Content-Type": "application/json"},
-                json={"model": "claude-3-5-sonnet-20241022", "system": RAG_SYSTEM_PROMPT, "messages": [{"role": "user", "content": prompt}], "max_tokens": 400, "temperature": 0.1},
-                timeout=60,
-            )
-            resp.raise_for_status()
-            text = resp.json().get("content", [{}])[0].get("text", "")
-        elif provider == "gemini":
-            resp = session.post(
-                f"https://generativelanguage.googleapis.com/v1beta/models/{core_services.GEMINI_MODEL}:generateContent?key={resolved_key}",
-                headers={"Content-Type": "application/json"},
-                json={"systemInstruction": {"parts": [{"text": RAG_SYSTEM_PROMPT}]}, "contents": [{"role": "user", "parts": [{"text": prompt}]}], "generationConfig": {"temperature": 0.1}},
-                timeout=60,
-            )
-            resp.raise_for_status()
-            text = resp.json().get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
-        else:
-            resp = session.post(
-                core_services.OPENAI_RESPONSES_URL,
-                headers={"Authorization": f"Bearer {resolved_key}", "Content-Type": "application/json"},
-                json={"model": core_services.OPENAI_MODEL, "instructions": RAG_SYSTEM_PROMPT, "input": [{"role": "user", "content": [{"type": "input_text", "text": prompt}]}]},
-                timeout=60,
-            )
-            resp.raise_for_status()
-            text = extract_output_text(resp.json())
+        resp = session.post(
+            f"https://generativelanguage.googleapis.com/v1beta/models/{core_services.GEMINI_MODEL}:generateContent",
+            headers={"x-goog-api-key": core_services.GEMINI_API_KEY, "Content-Type": "application/json"},
+            json={"systemInstruction": {"parts": [{"text": RAG_SYSTEM_PROMPT}]}, "contents": [{"role": "user", "parts": [{"text": prompt}]}], "generationConfig": {"temperature": 0.1}},
+            timeout=60,
+        )
+        resp.raise_for_status()
+        text = resp.json().get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
         return text.strip() or format_chat_reply(api_path, result)
     except Exception:
         return format_chat_reply(api_path, result)
@@ -115,7 +72,6 @@ def db_balance_by_ccid(params: dict[str, Any]) -> dict[str, Any]:
     period_name = params["period_name"]
     currency_code = params.get("currency_code", "USD")
 
-    # Validations
     if not core_services.validate_ledger(ledger_name):
         return {"error": f"Invalid ledger name: {ledger_name}"}
     if not core_services.validate_period(period_name, ledger_name):
@@ -133,7 +89,6 @@ def db_balance_by_account(params: dict[str, Any]) -> dict[str, Any]:
     period_name = params["period_name"]
     currency_code = params.get("currency_code", "USD")
 
-    # Validations
     if not core_services.validate_ledger(ledger_name):
         return {"error": f"Invalid ledger name: {ledger_name}"}
     if not core_services.validate_period(period_name, ledger_name):
@@ -203,7 +158,6 @@ def db_journal_details(params: dict[str, Any]) -> dict[str, Any]:
     period_name = params.get("period_name")
     currency_code = params.get("currency_code", "USD")
 
-    # Validations
     if not core_services.validate_ledger(ledger_name):
         return {"error": f"Invalid ledger name: {ledger_name}"}
     if period_name and not core_services.validate_period(period_name, ledger_name):
@@ -217,8 +171,16 @@ def db_journal_details(params: dict[str, Any]) -> dict[str, Any]:
     return {"ledger_id": params.get("ledger_id"), "ledger_name": ledger_name, "period_name": period_name, "account_number": account_str, "raw_drill_clob": clob, "drill_status_msg": msg, "hierarchy_id": hid}
 
 def dispatch_db_api(api_path: str, params: dict[str, Any]) -> dict[str, Any]:
-    map = {"/api/db/balance/by-ccid": db_balance_by_ccid, "/api/db/balance/by-account": db_balance_by_account, "/api/db/balance/diff": db_balance_diff, "/api/db/balance/trend": db_balance_trend, "/api/db/balance/explain": db_balance_explain, "/api/db/balance/highlights": db_balance_highlights, "/api/db/balance/diagnostics": db_balance_diagnostics}
-    if api_path in map: return annotate_ledger_metadata(map[api_path](params))
+    route_map = {
+        "/api/db/balance/by-ccid": db_balance_by_ccid,
+        "/api/db/balance/by-account": db_balance_by_account,
+        "/api/db/balance/diff": db_balance_diff,
+        "/api/db/balance/trend": db_balance_trend,
+        "/api/db/balance/explain": db_balance_explain,
+        "/api/db/balance/highlights": db_balance_highlights,
+        "/api/db/balance/diagnostics": db_balance_diagnostics,
+    }
+    if api_path in route_map: return annotate_ledger_metadata(route_map[api_path](params))
     if api_path == "/api/db/none": return {"message": "This question does not require a database query."}
     if api_path == "/api/db/unsupported": return {"message": "This question maps to a database area that is not implemented yet."}
     raise KeyError(api_path)
@@ -226,8 +188,8 @@ def dispatch_db_api(api_path: str, params: dict[str, Any]) -> dict[str, Any]:
 def format_chat_reply(api_path: str, result: dict[str, Any]) -> str:
     lbl = result.get("ledger_name") or (get_ledger_name(result.get("ledger_id")) if "ledger_id" in result else None)
     cur = core_services.format_currency
-    if api_path == "/api/db/balance/by-account": return f"Account {result['account_number']} in {lbl} for {result['period_name']} has YTD balance {cur(result['ytd_balance'])} and period activity {cur(result['period_activity'])}."
-    if api_path == "/api/db/balance/by-ccid": return f"CCID {result['ccid']} in {lbl} for {result['period_name']} has YTD balance {cur(result['ytd_balance'])} and period activity {cur(result['period_activity'])}."
+    if api_path == "/api/db/balance/by-account": return f"Account {result.get('account_number')} in {lbl} for {result.get('period_name')} has YTD balance {cur(result.get('ytd_balance'))} and period activity {cur(result.get('period_activity'))}."
+    if api_path == "/api/db/balance/by-ccid": return f"CCID {result.get('ccid')} in {lbl} for {result.get('period_name')} has YTD balance {cur(result.get('ytd_balance'))} and period activity {cur(result.get('period_activity'))}."
     if api_path == "/api/db/balance/diff":
         ident = f"account {result['account_number']}" if result.get("account_number") else f"CCID {result['ccid']}"
         return f"For {ident}, YTD changed by {cur(result['ytd_delta'])} between {result['period_from']} and {result['period_to']}. Period activity changed by {cur(result['period_activity_delta'])}."

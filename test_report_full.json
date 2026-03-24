@@ -2,11 +2,11 @@
   {
     "intent": "balance.lookup.segments.period",
     "question": "What is the balance for Account 16160 in 03-23?",
-    "status": 200,
-    "api_path": "/api/db/balance/by-account",
-    "classification": "ANSWERED",
-    "reply_excerpt": "I found multiple hierarchies for this field group. Please select one:",
-    "elapsed_ms": 7104
+    "status": "ERROR",
+    "api_path": "N/A",
+    "classification": "ERROR",
+    "reply_excerpt": "",
+    "elapsed_ms": 35442
   },
   {
     "intent": "balance.lookup.segments.period",
@@ -14,8 +14,8 @@
     "status": 200,
     "api_path": "/api/db/balance/by-account",
     "classification": "ANSWERED",
-    "reply_excerpt": "I found multiple hierarchies for this field group. Please select one:",
-    "elapsed_ms": 5359
+    "reply_excerpt": "Account 16160 in US Primary Ledger for 03-23 has YTD balance $8,808,652,533.46 and period activity -",
+    "elapsed_ms": 22016
   },
   {
     "intent": "balance.lookup.segments.period",
@@ -23,8 +23,8 @@
     "status": 200,
     "api_path": "/api/db/balance/by-account",
     "classification": "ANSWERED",
-    "reply_excerpt": "I found multiple hierarchies for this field group. Please select one:",
-    "elapsed_ms": 7225
+    "reply_excerpt": "Account 16160 in US Primary Ledger for 03-23 has YTD balance $8,808,652,533.46 and period activity -",
+    "elapsed_ms": 30767
   },
   {
     "intent": "balance.lookup.segments.period",
@@ -32,8 +32,8 @@
     "status": 200,
     "api_path": "/api/db/balance/by-account",
     "classification": "ANSWERED",
-    "reply_excerpt": "I found multiple hierarchies for this field group. Please select one:",
-    "elapsed_ms": 5079
+    "reply_excerpt": "Account 16160 in US Primary Ledger for 03-23 has YTD balance $8,808,652,533.46 and period activity -",
+    "elapsed_ms": 22168
   },
   {
     "intent": "balance.lookup.segments.period",
@@ -41,8 +41,8 @@
     "status": 200,
     "api_path": "/api/db/balance/by-account",
     "classification": "ANSWERED",
-    "reply_excerpt": "I found multiple hierarchies for this field group. Please select one:",
-    "elapsed_ms": 5610
+    "reply_excerpt": "Account 16160 in US Primary Ledger for 02-23 has YTD balance $8,808,844,675.42 and period activity -",
+    "elapsed_ms": 23690
   },
   {
     "intent": "balance.lookup.segments.period",
@@ -50,8 +50,8 @@
     "status": 200,
     "api_path": "/api/db/balance/by-account",
     "classification": "ANSWERED",
-    "reply_excerpt": "I found multiple hierarchies for this field group. Please select one:",
-    "elapsed_ms": 5665
+    "reply_excerpt": "Account 16160 in US Primary Ledger for 03-23 has YTD balance $8,808,652,533.46 and period activity -",
+    "elapsed_ms": 20591
   },
   {
     "intent": "balance.lookup.segments.period",
@@ -59,8 +59,8 @@
     "status": 200,
     "api_path": "/api/db/balance/by-account",
     "classification": "ANSWERED",
-    "reply_excerpt": "I found multiple hierarchies for this field group. Please select one:",
-    "elapsed_ms": 5354
+    "reply_excerpt": "Account 16160 in US Primary Ledger for 02-23 has YTD balance $8,808,844,675.42 and period activity -",
+    "elapsed_ms": 23556
   },
   {
     "intent": "balance.lookup.segments.period",
@@ -68,8 +68,8 @@
     "status": 200,
     "api_path": "/api/db/balance/by-account",
     "classification": "ANSWERED",
-    "reply_excerpt": "I found multiple hierarchies for this field group. Please select one:",
-    "elapsed_ms": 5524
+    "reply_excerpt": "Account 16160 in US Primary Ledger for 03-23 has YTD balance $8,808,652,533.46 and period activity -",
+    "elapsed_ms": 19764
   },
   {
     "intent": "balance.lookup.segments.period",
@@ -78,16 +78,16 @@
     "api_path": "N/A",
     "classification": "ERROR",
     "reply_excerpt": "",
-    "elapsed_ms": 30014
+    "elapsed_ms": 30007
   },
   {
     "intent": "balance.lookup.segments.period",
     "question": "What is the YTD for Account 16160?",
-    "status": 200,
-    "api_path": "/api/db/balance/by-account",
-    "classification": "ANSWERED",
-    "reply_excerpt": "I found multiple hierarchies for this field group. Please select one:",
-    "elapsed_ms": 13400
+    "status": "ERROR",
+    "api_path": "N/A",
+    "classification": "ERROR",
+    "reply_excerpt": "",
+    "elapsed_ms": 30016
   },
   {
     "intent": "balance.lookup.segments.period",
@@ -95,8 +95,8 @@
     "status": 200,
     "api_path": "/api/db/balance/by-account",
     "classification": "ANSWERED",
-    "reply_excerpt": "I found multiple hierarchies for this field group. Please select one:",
-    "elapsed_ms": 7617
+    "reply_excerpt": "Account 16160 in US Primary Ledger for 03-23 has YTD balance $8,808,652,533.46 and period activity -",
+    "elapsed_ms": 26087
   },
   {
     "intent": "balance.lookup.segments.period",
@@ -104,8 +104,8 @@
     "status": 200,
     "api_path": "/api/db/balance/by-account",
     "classification": "ANSWERED",
-    "reply_excerpt": "I found multiple hierarchies for this field group. Please select one:",
-    "elapsed_ms": 10401
+    "reply_excerpt": "Account 16160 in US Primary Ledger for 01-22 has YTD balance $8,819,175,478.21 and period activity -",
+    "elapsed_ms": 41533
   },
   {
     "intent": "balance.lookup.segments.period",
@@ -113,8 +113,8 @@
     "status": 200,
     "api_path": "/api/db/balance/by-account",
     "classification": "ANSWERED",
-    "reply_excerpt": "I found multiple hierarchies for this field group. Please select one:",
-    "elapsed_ms": 9863
+    "reply_excerpt": "Account 16160 in US Primary Ledger for 01-22 has YTD balance $8,819,175,478.21 and period activity -",
+    "elapsed_ms": 28334
   },
   {
     "intent": "balance.diff.two_periods",
@@ -123,7 +123,7 @@
     "api_path": "/api/db/balance/diff",
     "classification": "ANSWERED",
     "reply_excerpt": "I found multiple hierarchies for this field group. Please select one:",
-    "elapsed_ms": 6122
+    "elapsed_ms": 11624
   },
   {
     "intent": "balance.diff.two_periods",
@@ -132,7 +132,7 @@
     "api_path": "N/A",
     "classification": "ERROR",
     "reply_excerpt": "",
-    "elapsed_ms": 4846
+    "elapsed_ms": 6722
   },
   {
     "intent": "balance.diff.two_periods",
@@ -141,7 +141,7 @@
     "api_path": "/api/db/balance/diff",
     "classification": "ANSWERED",
     "reply_excerpt": "I found multiple hierarchies for this field group. Please select one:",
-    "elapsed_ms": 5282
+    "elapsed_ms": 14057
   },
   {
     "intent": "balance.diff.two_periods",
@@ -150,7 +150,7 @@
     "api_path": "/api/db/balance/diff",
     "classification": "ANSWERED",
     "reply_excerpt": "I found multiple hierarchies for this field group. Please select one:",
-    "elapsed_ms": 5342
+    "elapsed_ms": 11271
   },
   {
     "intent": "balance.trend.last_n",
@@ -159,7 +159,7 @@
     "api_path": "/api/db/balance/trend",
     "classification": "ZERO_BALANCE",
     "reply_excerpt": "Trend: 10-21: -$1,837,128,197.56; 11-21: -$1,856,204,556.25; 12-21: -$1,852,855,605.51; Adj-21: -$1,",
-    "elapsed_ms": 17042
+    "elapsed_ms": 19913
   },
   {
     "intent": "balance.trend.last_n",
@@ -168,7 +168,7 @@
     "api_path": "/api/db/balance/trend",
     "classification": "ZERO_BALANCE",
     "reply_excerpt": "Trend: 09-21: -$1,817,459,747.91; 10-21: -$1,837,128,197.56; 11-21: -$1,856,204,556.25; 12-21: -$1,8",
-    "elapsed_ms": 16214
+    "elapsed_ms": 16354
   },
   {
     "intent": "balance.trend.last_n",
@@ -177,7 +177,7 @@
     "api_path": "/api/db/balance/trend",
     "classification": "ZERO_BALANCE",
     "reply_excerpt": "Trend: 11-21: -$1,856,204,556.25; 12-21: -$1,852,855,605.51; Adj-21: -$1,852,855,605.51; 01-22: -$1,",
-    "elapsed_ms": 16353
+    "elapsed_ms": 20455
   },
   {
     "intent": "balance.trend.last_n",
@@ -186,7 +186,7 @@
     "api_path": "/api/db/balance/trend",
     "classification": "ZERO_BALANCE",
     "reply_excerpt": "Trend: 10-25: $8,808,076,107.58; 11-25: $8,808,076,107.58; 12-25: $8,808,076,107.58; Adj-25: $8,808,",
-    "elapsed_ms": 19981
+    "elapsed_ms": 17056
   },
   {
     "intent": "balance.type.override",
@@ -194,8 +194,8 @@
     "status": 200,
     "api_path": "/api/db/balance/by-account",
     "classification": "ANSWERED",
-    "reply_excerpt": "I found multiple hierarchies for this field group. Please select one:",
-    "elapsed_ms": 6423
+    "reply_excerpt": "Account 16160 in US Primary Ledger for 03-23 has YTD balance -$1.00 and period activity -$1.00.",
+    "elapsed_ms": 22087
   },
   {
     "intent": "balance.type.override",
@@ -204,7 +204,7 @@
     "api_path": "N/A",
     "classification": "ERROR",
     "reply_excerpt": "",
-    "elapsed_ms": 18155
+    "elapsed_ms": 19772
   },
   {
     "intent": "balance.type.override",
@@ -212,8 +212,8 @@
     "status": 200,
     "api_path": "/api/db/balance/by-account",
     "classification": "ANSWERED",
-    "reply_excerpt": "I found multiple hierarchies for this field group. Please select one:",
-    "elapsed_ms": 6673
+    "reply_excerpt": "Account 16160 in US Primary Ledger for 02-23 has YTD balance $8,808,844,675.42 and period activity -",
+    "elapsed_ms": 23545
   },
   {
     "intent": "balance.type.override",
@@ -222,7 +222,7 @@
     "api_path": "N/A",
     "classification": "ERROR",
     "reply_excerpt": "",
-    "elapsed_ms": 11643
+    "elapsed_ms": 12223
   },
   {
     "intent": "balance.currency.override",
@@ -230,8 +230,8 @@
     "status": 200,
     "api_path": "/api/db/balance/by-account",
     "classification": "ANSWERED",
-    "reply_excerpt": "I found multiple hierarchies for this field group. Please select one:",
-    "elapsed_ms": 5173
+    "reply_excerpt": "Account 16160 in US Primary Ledger for 03-23 has YTD balance $8,808,652,533.46 and period activity -",
+    "elapsed_ms": 20798
   },
   {
     "intent": "balance.currency.override",
@@ -239,8 +239,8 @@
     "status": 200,
     "api_path": "/api/db/balance/by-account",
     "classification": "ANSWERED",
-    "reply_excerpt": "I found multiple hierarchies for this field group. Please select one:",
-    "elapsed_ms": 5332
+    "reply_excerpt": "Account 16160 in US Primary Ledger for 02-23 has YTD balance $8,808,844,675.42 and period activity -",
+    "elapsed_ms": 19472
   },
   {
     "intent": "balance.currency.override",
@@ -248,8 +248,8 @@
     "status": 200,
     "api_path": "/api/db/balance/by-ccid",
     "classification": "ANSWERED",
-    "reply_excerpt": "I found multiple hierarchies for this field group. Please select one:",
-    "elapsed_ms": 9848
+    "reply_excerpt": "CCID 300000047428567 in US Primary Ledger for 01-22 has YTD balance $8,819,175,478.21 and period act",
+    "elapsed_ms": 31486
   },
   {
     "intent": "balance.explain.calculation",
@@ -258,7 +258,7 @@
     "api_path": "/api/db/balance/explain",
     "classification": "ANSWERED",
     "reply_excerpt": "YTD $632,281,448,241.09 = begin DR $1,163,806,568,366.12 - begin CR $531,524,927,983.07 + period DR ",
-    "elapsed_ms": 12717
+    "elapsed_ms": 16591
   },
   {
     "intent": "balance.explain.calculation",
@@ -267,16 +267,16 @@
     "api_path": "/api/db/balance/explain",
     "classification": "ANSWERED",
     "reply_excerpt": "YTD -$1,862,606,146.87 = begin DR $85,632,832,932.00 - begin CR $87,485,688,537.51 + period DR $9,30",
-    "elapsed_ms": 15821
+    "elapsed_ms": 17459
   },
   {
     "intent": "balance.explain.calculation",
     "question": "Show debit/credit breakdown for Account 16160 this period.",
-    "status": "ERROR",
-    "api_path": "N/A",
-    "classification": "ERROR",
-    "reply_excerpt": "",
-    "elapsed_ms": 1301294
+    "status": 200,
+    "api_path": "/api/db/balance/explain",
+    "classification": "ZERO_BALANCE",
+    "reply_excerpt": "YTD $0.00 = begin DR $0.00 - begin CR $0.00 + period DR $0.00 - period CR $0.00.",
+    "elapsed_ms": 18252
   },
   {
     "intent": "balance.high_level",
@@ -285,7 +285,7 @@
     "api_path": "N/A",
     "classification": "ERROR",
     "reply_excerpt": "",
-    "elapsed_ms": 30010
+    "elapsed_ms": 30005
   },
   {
     "intent": "balance.high_level",
@@ -294,25 +294,25 @@
     "api_path": "N/A",
     "classification": "ERROR",
     "reply_excerpt": "",
-    "elapsed_ms": 30026
+    "elapsed_ms": 30016
   },
   {
     "intent": "balance.high_level",
     "question": "Which accounts changed the most this period?",
-    "status": 200,
-    "api_path": "/api/db/balance/highlights",
-    "classification": "ZERO_BALANCE",
-    "reply_excerpt": "Top accounts for ADJ-25: ",
-    "elapsed_ms": 15861
+    "status": "ERROR",
+    "api_path": "N/A",
+    "classification": "ERROR",
+    "reply_excerpt": "",
+    "elapsed_ms": 30007
   },
   {
     "intent": "balance.high_level",
     "question": "Anything unusual in the GL this month?",
-    "status": 200,
-    "api_path": "/api/db/balance/highlights",
-    "classification": "ZERO_BALANCE",
-    "reply_excerpt": "Top accounts for ADJ-25: ",
-    "elapsed_ms": 16640
+    "status": "ERROR",
+    "api_path": "N/A",
+    "classification": "ERROR",
+    "reply_excerpt": "",
+    "elapsed_ms": 30003
   },
   {
     "intent": "journals.lookup.basic",
@@ -321,7 +321,7 @@
     "api_path": "N/A",
     "classification": "ERROR",
     "reply_excerpt": "",
-    "elapsed_ms": 5239
+    "elapsed_ms": 6833
   },
   {
     "intent": "journals.lookup.basic",
@@ -330,7 +330,7 @@
     "api_path": "N/A",
     "classification": "ERROR",
     "reply_excerpt": "",
-    "elapsed_ms": 4971
+    "elapsed_ms": 6177
   },
   {
     "intent": "journals.lookup.basic",
@@ -339,7 +339,7 @@
     "api_path": "/api/db/journal/details",
     "classification": "ZERO_BALANCE",
     "reply_excerpt": "Journal Drilldown completed. Detailed payload generated internally (length: 0 chars).",
-    "elapsed_ms": 8921
+    "elapsed_ms": 29398
   },
   {
     "intent": "journals.summary.by_source",
@@ -348,7 +348,7 @@
     "api_path": "N/A",
     "classification": "ERROR",
     "reply_excerpt": "",
-    "elapsed_ms": 5825
+    "elapsed_ms": 5426
   },
   {
     "intent": "journals.summary.by_source",
@@ -357,7 +357,7 @@
     "api_path": "N/A",
     "classification": "ERROR",
     "reply_excerpt": "",
-    "elapsed_ms": 4935
+    "elapsed_ms": 5722
   },
   {
     "intent": "journals.summary.by_source",
@@ -366,6 +366,6 @@
     "api_path": "/api/db/journal/details",
     "classification": "ZERO_BALANCE",
     "reply_excerpt": "Journal Drilldown completed. Detailed payload generated internally (length: 0 chars).",
-    "elapsed_ms": 10884
+    "elapsed_ms": 10124
   }
 ]

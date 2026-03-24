@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl -s http://127.0.0.1:5000/api/health)",
+      "Bash(curl -s -X POST http://127.0.0.1:5000/api/nlu/parse -H \"Content-Type: application/json\" -d \"{\"\"message\"\": \"\"Compare 01-23 vs 02-23 for Account 16160.\"\"}\")",
+      "Bash(curl -s -X POST http://127.0.0.1:5000/api/nlu/parse -H \"Content-Type: application/json\" -d \"{\"\"message\"\": \"\"Show accounts with high balances in 03-23.\"\"}\")",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); r=d[''''routing'''']; print\\(''''DIAGNOSTICS | path:'''', r[''''api_path'''']\\)\" __NEW_LINE_143434737403fdec__ curl -s -X POST http://127.0.0.1:5000/api/nlu/parse -H \"Content-Type: application/json\" -d \"{\"\"message\"\": \"\"Give me YTD balance for 16160 in 03-23.\"\"}\")",
+      "Read(//mnt/c/Users/PRAVEE~1/AppData/Local/Temp/claude/c--Users-PraveenKosanam-gl-assistant/6eafd569-39c3-40fc-af3f-bf9a7d393c33/tasks/**)",
+      "Read(//c/Users/PraveenKosanam/AppData/Local/Temp/claude/c--Users-PraveenKosanam-gl-assistant/6eafd569-39c3-40fc-af3f-bf9a7d393c33/tasks/**)",
+      "Bash(curl -s -X POST http://127.0.0.1:5000/api/chat -H \"Content-Type: application/json\" -d \"{\"\"message\"\": \"\"What does our GL look like this month?\"\", \"\"history\"\": []}\")",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(''''REPLY:'''', d.get\\(''''reply'''',''''''''\\)[:200]\\); print\\(''''ROUTE:'''', d.get\\(''''routing'''',{}\\).get\\(''''api_path''''\\)\\); print\\(''''TIMINGS:'''', d.get\\(''''timings''''\\)\\)\")",
+      "Bash(curl -s -X POST http://127.0.0.1:5000/api/chat -H \"Content-Type: application/json\" -d \"{\"\"message\"\": \"\"Give me YTD balance for 16160 in 03-23.\"\", \"\"history\"\": []}\")",
+      "Bash(curl -s -X POST http://127.0.0.1:5000/api/chat -H \"Content-Type: application/json\" -d \"{\"\"message\"\": \"\"Compare 01-23 vs 02-23 for Account 16160.\"\", \"\"history\"\": []}\")",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(''''REPLY:'''', d.get\\(''''reply'''',''''''''\\)[:300]\\); print\\(''''ROUTE:'''', d.get\\(''''routing'''',{}\\).get\\(''''api_path''''\\)\\); print\\(''''ERR:'''', d.get\\(''''error'''',''''''''\\)[:200]\\)\")",
+      "WebSearch",
+      "WebFetch(domain:www.glconnect.com)",
+      "WebFetch(domain:splashbi.com)",
+      "WebFetch(domain:glconnect.com)",
+      "Bash(taskkill /F /IM python.exe /T)",
+      "Bash(taskkill /F /IM python3.exe /T)",
+      "Bash(taskkill //F //IM python.exe //T)",
+      "Bash(netstat -ano)",
+      "Bash(curl -s -X POST http://127.0.0.1:5000/api/health)"
+    ]
+  }
+}

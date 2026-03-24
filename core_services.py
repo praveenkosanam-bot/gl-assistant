@@ -21,28 +21,20 @@ def load_dotenv(path: str = ".env") -> None:
 
 load_dotenv()
 
-OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3-flash-preview")
-OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses"
-DEFAULT_LEDGER_NAME = os.getenv("DEFAULT_LEDGER_NAME", "US Primary Ledger")
-DEFAULT_LEDGER_ID = int(os.getenv("DEFAULT_LEDGER_ID", "300000046975971"))
-DEFAULT_CURRENCY_SYMBOL = os.getenv("DEFAULT_CURRENCY_SYMBOL", "$")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
-DB_CONFIG = {
-    "user": os.getenv("DB_USER", "XXSBID_605"),
-    "password": os.getenv("DB_PASSWORD", "XXSBID_605"),
-    "host": os.getenv("DB_HOST", "192.168.8.127"),
-    "port": int(os.getenv("DB_PORT", "1521")),
-    "service_name": os.getenv("DB_SERVICE", "splashgl001"),
-}
+DEFAULT_LEDGER_NAME = os.getenv("DEFAULT_LEDGER_NAME", "")
+DEFAULT_LEDGER_ID = int(os.getenv("DEFAULT_LEDGER_ID", "0"))
+DEFAULT_CURRENCY_SYMBOL = os.getenv("DEFAULT_CURRENCY_SYMBOL", "$")
 
-DB_POOL_MIN = int(os.getenv("DB_POOL_MIN", "1"))
-DB_POOL_MAX = int(os.getenv("DB_POOL_MAX", "4"))
-DB_POOL_INCREMENT = int(os.getenv("DB_POOL_INCREMENT", "1"))
-MOCK_OPENAI = os.getenv("MOCK_OPENAI", "").lower() in {"1", "true", "yes"}
+GLC_SOURCE_ID = int(os.getenv("GLC_SOURCE_ID", "0"))
+GLC_USER_ID = int(os.getenv("GLC_USER_ID", "0"))
+GLC_ROLE = os.getenv("GLC_ROLE", "")
+GLC_ROLE_ID = int(os.getenv("GLC_ROLE_ID", "0"))
+GLC_COA_ID = int(os.getenv("GLC_COA_ID", "0"))
+
+MOCK_LLM = os.getenv("MOCK_LLM", "").lower() in {"1", "true", "yes"}
 RASA_URL = os.getenv("RASA_URL", "").rstrip("/")
 QUESTION_INVENTORY_PATH = Path(os.getenv("QUESTION_INVENTORY_PATH", "robot/tests/glcai_questions.yaml"))
 
@@ -61,6 +53,18 @@ MONTH_MAP = {
     "JUL": 7, "AUG": 8, "SEP": 9, "OCT": 10, "NOV": 11, "DEC": 12, "ADJ": 13,
 }
 
+DB_CONFIG = {
+    "user": os.getenv("DB_USER", ""),
+    "password": os.getenv("DB_PASSWORD", ""),
+    "host": os.getenv("DB_HOST", ""),
+    "port": int(os.getenv("DB_PORT", "1521")),
+    "service_name": os.getenv("DB_SERVICE", ""),
+}
+
+DB_POOL_MIN = int(os.getenv("DB_POOL_MIN", "1"))
+DB_POOL_MAX = int(os.getenv("DB_POOL_MAX", "4"))
+DB_POOL_INCREMENT = int(os.getenv("DB_POOL_INCREMENT", "1"))
+
 DB_POOL = oracledb.create_pool(
     min=DB_POOL_MIN,
     max=DB_POOL_MAX,
@@ -71,30 +75,37 @@ DB_POOL = oracledb.create_pool(
 def get_db_connection():
     return DB_POOL.acquire()
 
-def get_hierarchy_table_for_account(coa_id: int = 21, hierarchy_id: int | None = None) -> str:
+def get_hierarchy_table_for_account(coa_id: int | None = None, hierarchy_id: int | None = None) -> str:
+    # If the caller already resolved a hierarchy (from user selection), use it directly.
     if hierarchy_id:
         return f"GLC_HIER_{hierarchy_id}"
-        
+
+    effective_coa_id = coa_id if coa_id is not None else GLC_COA_ID
+
     # 1. Lookup FIELD_GROUP_ID for 'Account' from COA_FIELDS
     sql_fg = "SELECT FIELD_GROUP_ID FROM coa_fields WHERE coa_id = :coa_id AND field_name = 'Account'"
-    fg_row = query_one(sql_fg, {"coa_id": coa_id})
+    fg_row = query_one(sql_fg, {"coa_id": effective_coa_id})
     if not fg_row:
-        return "GLC_HIER_1169" # Fallback
+        raise AmbiguousHierarchyError(
+            f"No Account field group found for COA {effective_coa_id}.", []
+        )
     fg_id = fg_row[0]
-    
-    # 2. Lookup ALL HIERARCHY_IDs from GLC_HIERARCHIES for that FIELD_GROUP_ID
-    sql_h = "SELECT hierarchy_id, hierarchy_name FROM glc_hierarchies WHERE field_group_id = :fg_id"
+
+    # 2. Lookup ALL HIERARCHY_IDs for that FIELD_GROUP_ID — no defaults, no fallbacks.
+    sql_h = "SELECT hierarchy_id, hierarchy_name FROM glc_hierarchies WHERE field_group_id = :fg_id ORDER BY hierarchy_name"
     h_rows = query_all(sql_h, {"fg_id": fg_id})
-    print(f"[HIERARHY] Found {len(h_rows)} options for fg_id {fg_id}")
-    
+    print(f"[HIERARCHY] Found {len(h_rows)} options for fg_id {fg_id}")
+
     if not h_rows:
-        return "GLC_HIER_1169"
+        raise AmbiguousHierarchyError(
+            f"No hierarchies found for field group {fg_id}.", []
+        )
     if len(h_rows) == 1:
         return f"GLC_HIER_{h_rows[0][0]}"
-        
-    # Multiple hierarchies - Raise a custom error with options
+
+    # Multiple hierarchies — always prompt the user to choose.
     options = [{"id": r[0], "name": r[1]} for r in h_rows]
-    raise AmbiguousHierarchyError("Multiple hierarchies found for this field group.", options)
+    raise AmbiguousHierarchyError("Multiple hierarchies found. Please select one:", options)
 
 class AmbiguousHierarchyError(Exception):
     def __init__(self, message: str, options: list[dict[str, Any]]):
@@ -343,21 +354,21 @@ def call_glc_balance(
         glc_utility.g_log_level := '5';
         glc_utility.init_session(
             p_session_id => :session_id,
-            p_source_id => 5,
-            p_user_id => 1,
-            p_role => 'ADMIN',
-            p_role_id => 30000219190448,
+            p_source_id => :glc_source_id,
+            p_user_id => :glc_user_id,
+            p_role => :glc_role,
+            p_role_id => :glc_role_id,
             p_session_params => NULL
         );
-        glc_utility.set_field_groups(p_coa_id => 21);
+        glc_utility.set_field_groups(p_coa_id => :glc_coa_id);
         l_fields(1) := '';
         l_fields(2) := '';
-        l_fields(3) := :account_string; 
+        l_fields(3) := :account_string;
         l_hier(1)   := '';
         l_hier(2)   := '';
         l_hier(3)   := :hierarchy_table;
         glc_balances_pkg.get_balance(
-            p_ledger_name => NVL(:ledger_name, 'US Primary Ledger'),
+            p_ledger_name => NVL(:ledger_name, :default_ledger_name),
             p_period_name => :period_name,
             p_actual_flag => :actual_flag,
             p_currency_code => :currency_code,
@@ -394,7 +405,13 @@ def call_glc_balance(
                 start = time.perf_counter()
                 cursor.execute(sql, {
                     "session_id": session_id,
+                    "glc_source_id": GLC_SOURCE_ID,
+                    "glc_user_id": GLC_USER_ID,
+                    "glc_role": GLC_ROLE,
+                    "glc_role_id": GLC_ROLE_ID,
+                    "glc_coa_id": GLC_COA_ID,
                     "ledger_name": ledger_name,
+                    "default_ledger_name": DEFAULT_LEDGER_NAME,
                     "period_name": period_name,
                     "actual_flag": actual_flag,
                     "currency_code": currency_code,
@@ -435,13 +452,13 @@ def call_glc_drill(
         glc_utility.g_log_level := '5';
         glc_utility.init_session(
             p_session_id => :session_id,
-            p_source_id => 5,
-            p_user_id => 1,
-            p_role => 'ADMIN',
-            p_role_id => 30000219190448,
+            p_source_id => :glc_source_id,
+            p_user_id => :glc_user_id,
+            p_role => :glc_role,
+            p_role_id => :glc_role_id,
             p_session_params => NULL
         );
-        glc_utility.set_field_groups(p_coa_id => 21);
+        glc_utility.set_field_groups(p_coa_id => :glc_coa_id);
         l_fields(1) := '';
         l_fields(2) := '';
         l_fields(3) := :account_string;
@@ -449,7 +466,7 @@ def call_glc_drill(
         l_hier(2)   := '';
         l_hier(3)   := :hierarchy_table;
         glc_drill_pkg.get_journal_dtl(
-            p_ledger_name => NVL(:ledger_name, 'US Primary Ledger'),
+            p_ledger_name => NVL(:ledger_name, :default_ledger_name),
             p_period_name => :period_name,
             p_actual_flag => :actual_flag,
             p_currency_code => 'USD',
@@ -478,10 +495,17 @@ def call_glc_drill(
             try:
                 try:
                     cursor.execute("INSERT INTO glc_drill_details (drill_process_id, sub_process_id, start_time) VALUES (:1, :2, sysdate)", [process_id, process_id])
-                except: pass
+                except Exception:
+                    pass
                 cursor.execute(sql, {
                     "session_id": session_id,
+                    "glc_source_id": GLC_SOURCE_ID,
+                    "glc_user_id": GLC_USER_ID,
+                    "glc_role": GLC_ROLE,
+                    "glc_role_id": GLC_ROLE_ID,
+                    "glc_coa_id": GLC_COA_ID,
                     "ledger_name": ledger_name,
+                    "default_ledger_name": DEFAULT_LEDGER_NAME,
                     "period_name": period_name,
                     "actual_flag": actual_flag,
                     "account_string": account_string,

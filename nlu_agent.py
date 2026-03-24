@@ -131,7 +131,7 @@ def parse_question_with_rasa(question: str) -> dict[str, Any] | None:
         name = entity.get("entity"); value = entity.get("value")
         if name in {"ledger_id", "ccid", "n"} and value is not None:
             try: entities[name] = int(value)
-            except: entities[name] = value
+            except Exception: entities[name] = value
         elif name == "account": entities["account_number"] = str(value)
         elif name == "period": entities["period_name"] = str(value).upper()
         elif name == "period_from": entities["period_from"] = str(value).upper()
@@ -188,17 +188,6 @@ def validate_route_params(api_path: str, params: dict[str, Any]) -> str | None:
         missing.append("required fields")
     return "Missing required query inputs: " + ", ".join(missing) if missing else None
 
-def extract_output_text(payload: dict[str, Any]) -> str:
-    if payload.get("output_text"): return payload["output_text"]
-    texts = []
-    for item in payload.get("output", []):
-        for content in item.get("content", []):
-            if content.get("type") in {"output_text", "text"}:
-                t = content.get("text")
-                if isinstance(t, str): texts.append(t)
-                elif isinstance(t, dict) and t.get("value"): texts.append(t["value"])
-    return "\n".join(texts).strip()
-
 def resolve_question_rule_based(question: str, history: list[dict[str, str]] | None = None) -> dict[str, Any]:
     parsed = parse_question_local(question)
     params = complete_lookup_params(question, parsed["entities"], history)
@@ -221,21 +210,12 @@ def resolve_question_rule_based(question: str, history: list[dict[str, str]] | N
     if params.get("account_number") in ("has", "is", "for", "in", "the", "change", "what", "which"): params["account_number"] = None
     return {"api_path": api_path, "params": params, "intent": parsed["intent"], "intent_confidence": parsed["confidence"], "parser_source": parsed["source"]}
 
-def resolve_question_with_llm(history: list[dict[str, str]], question: str, provider: str, api_key: str) -> dict[str, Any]:
-    # Use server-side key fallback if no client-side key is provided
-    if not api_key:
-        if provider == "openai":
-            api_key = core_services.OPENAI_API_KEY
-        elif provider == "anthropic":
-            api_key = core_services.ANTHROPIC_API_KEY
-        elif provider == "gemini":
-            api_key = core_services.GEMINI_API_KEY
-
-    if core_services.MOCK_OPENAI or not api_key:
+def resolve_question_with_llm(history: list[dict[str, str]], question: str) -> dict[str, Any]:
+    if core_services.MOCK_LLM or not core_services.GEMINI_API_KEY:
         return resolve_question_rule_based(question, history)
     try:
         rasa_result = parse_question_with_rasa(question)
-    except:
+    except Exception:
         rasa_result = None
     if rasa_result and rasa_result.get("intent") in INTENT_API_MAP:
         routed = {"api_path": INTENT_API_MAP[rasa_result["intent"]], "params": complete_lookup_params(question, rasa_result["entities"], history), "intent": rasa_result["intent"], "intent_confidence": rasa_result["confidence"], "parser_source": rasa_result["source"], "routing_mode": "rasa"}
@@ -247,28 +227,27 @@ def resolve_question_with_llm(history: list[dict[str, str]], question: str, prov
     try:
         import time
         start_llm = time.perf_counter()
-        if provider == "anthropic":
-            resp = session.post("https://api.anthropic.com/v1/messages", headers={"x-api-key": api_key, "anthropic-version": "2023-06-01", "Content-Type": "application/json"}, json={"model": "claude-3-5-sonnet-20241022", "system": SYSTEM_PROMPT + "\n" + ROUTING_INSTRUCTIONS, "messages": [{"role": "user", "content": prompt}], "max_tokens": 1024, "temperature": 0.0}, timeout=60)
-            resp.raise_for_status(); text = resp.json().get("content", [{}])[0].get("text", "")
-        elif provider == "gemini":
-            resp = session.post(f"https://generativelanguage.googleapis.com/v1beta/models/{core_services.GEMINI_MODEL}:generateContent?key={api_key}", headers={"Content-Type": "application/json"}, json={"systemInstruction": {"parts": [{"text": SYSTEM_PROMPT + "\n" + ROUTING_INSTRUCTIONS}]}, "contents": [{"role": "user", "parts": [{"text": prompt}]}], "generationConfig": {"temperature": 0.0}}, timeout=60)
-            resp.raise_for_status(); text = resp.json().get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
-        else:
-            resp = session.post(core_services.OPENAI_RESPONSES_URL, headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}, json={"model": core_services.OPENAI_MODEL, "instructions": SYSTEM_PROMPT + "\n" + ROUTING_INSTRUCTIONS, "input": [{"role": "user", "content": [{"type": "input_text", "text": prompt}]}]}, timeout=60)
-            resp.raise_for_status(); text = extract_output_text(resp.json())
+        resp = session.post(
+            f"https://generativelanguage.googleapis.com/v1beta/models/{core_services.GEMINI_MODEL}:generateContent",
+            headers={"x-goog-api-key": core_services.GEMINI_API_KEY, "Content-Type": "application/json"},
+            json={"systemInstruction": {"parts": [{"text": SYSTEM_PROMPT + "\n" + ROUTING_INSTRUCTIONS}]}, "contents": [{"role": "user", "parts": [{"text": prompt}]}], "generationConfig": {"temperature": 0.0}},
+            timeout=60,
+        )
+        resp.raise_for_status()
+        text = resp.json().get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
         llm_duration = (time.perf_counter() - start_llm) * 1000
-        print(f"[LLM] {provider.upper()} request took {llm_duration:.1f}ms")
-        if not text: raise RuntimeError(f"{provider} response did not contain routing output.")
+        print(f"[LLM] Gemini request took {llm_duration:.1f}ms")
+        if not text: raise RuntimeError("Gemini response did not contain routing output.")
         try: routed = json.loads(text)
-        except:
+        except Exception:
             m = re.search(r"\{.*\}", text, re.DOTALL)
-            if not m: raise RuntimeError(f"{provider} route output was not valid JSON: {text}")
+            if not m: raise RuntimeError(f"Gemini route output was not valid JSON: {text}")
             routed = json.loads(m.group(0))
         if routed.get("api_path") not in SUPPORTED_API_PATHS | {"/api/db/none", "/api/db/unsupported", "/api/db/journal/details"}:
-            raise RuntimeError(f"{provider} returned unsupported api path: {routed.get('api_path')}")
+            raise RuntimeError(f"Gemini returned unsupported api path: {routed.get('api_path')}")
         routed["params"] = complete_lookup_params(question, routed.get("params") or {}, history)
-        routed["routing_mode"] = provider
+        routed["routing_mode"] = "gemini"
         return routed
     except Exception as e:
-        routed = resolve_question_rule_based(question, history); routed["routing_mode"] = f"{provider}_fallback_due_to_{type(e).__name__}"
+        routed = resolve_question_rule_based(question, history); routed["routing_mode"] = f"gemini_fallback_due_to_{type(e).__name__}"
         return routed
