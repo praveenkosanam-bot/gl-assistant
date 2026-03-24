@@ -22,6 +22,7 @@ def load_dotenv(path: str = ".env") -> None:
 load_dotenv()
 
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3-flash-preview")
 OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses"
 DEFAULT_LEDGER_NAME = os.getenv("DEFAULT_LEDGER_NAME", "US Primary Ledger")
 DEFAULT_LEDGER_ID = int(os.getenv("DEFAULT_LEDGER_ID", "300000046975971"))
@@ -70,17 +71,57 @@ DB_POOL = oracledb.create_pool(
 def get_db_connection():
     return DB_POOL.acquire()
 
+def get_hierarchy_table_for_account(coa_id: int = 21, hierarchy_id: int | None = None) -> str:
+    if hierarchy_id:
+        return f"GLC_HIER_{hierarchy_id}"
+        
+    # 1. Lookup FIELD_GROUP_ID for 'Account' from COA_FIELDS
+    sql_fg = "SELECT FIELD_GROUP_ID FROM coa_fields WHERE coa_id = :coa_id AND field_name = 'Account'"
+    fg_row = query_one(sql_fg, {"coa_id": coa_id})
+    if not fg_row:
+        return "GLC_HIER_1169" # Fallback
+    fg_id = fg_row[0]
+    
+    # 2. Lookup ALL HIERARCHY_IDs from GLC_HIERARCHIES for that FIELD_GROUP_ID
+    sql_h = "SELECT hierarchy_id, hierarchy_name FROM glc_hierarchies WHERE field_group_id = :fg_id"
+    h_rows = query_all(sql_h, {"fg_id": fg_id})
+    print(f"[HIERARHY] Found {len(h_rows)} options for fg_id {fg_id}")
+    
+    if not h_rows:
+        return "GLC_HIER_1169"
+    if len(h_rows) == 1:
+        return f"GLC_HIER_{h_rows[0][0]}"
+        
+    # Multiple hierarchies - Raise a custom error with options
+    options = [{"id": r[0], "name": r[1]} for r in h_rows]
+    raise AmbiguousHierarchyError("Multiple hierarchies found for this field group.", options)
+
+class AmbiguousHierarchyError(Exception):
+    def __init__(self, message: str, options: list[dict[str, Any]]):
+        super().__init__(message)
+        self.options = options
+
 def query_one(sql: str, params: dict[str, Any] | None = None):
+    import time
+    start = time.perf_counter()
     with get_db_connection() as conn:
         with conn.cursor() as cursor:
             cursor.execute(sql, params or {})
-            return cursor.fetchone()
+            res = cursor.fetchone()
+            duration = (time.perf_counter() - start) * 1000
+            print(f"[DB] query_one took {duration:.1f}ms: {sql[:100]}...")
+            return res
 
 def query_all(sql: str, params: dict[str, Any] | None = None):
+    import time
+    start = time.perf_counter()
     with get_db_connection() as conn:
         with conn.cursor() as cursor:
             cursor.execute(sql, params or {})
-            return cursor.fetchall()
+            res = cursor.fetchall()
+            duration = (time.perf_counter() - start) * 1000
+            print(f"[DB] query_all took {duration:.1f}ms: {sql[:100]}...")
+            return res
 
 def seed_lookup(
     account_number: str | None = None,
@@ -248,13 +289,38 @@ def extract_filters(message: str) -> dict[str, Any]:
                 break
     return results
 
+def validate_period(period_name: str, ledger_name: str) -> bool:
+    sql = """
+        SELECT per.period_id
+          FROM periods per
+          JOIN ledger_groups_assignments lga
+            ON lga.period_type_id = per.period_type_id
+           AND lga.period_group_id = per.period_group_id
+         WHERE lga.ledger_name = :ledger_name
+           AND per.period_name = :period_name
+         FETCH FIRST 1 ROW ONLY
+    """
+    row = query_one(sql, {"period_name": period_name, "ledger_name": ledger_name})
+    return bool(row)
+
+def validate_ledger(ledger_name: str) -> bool:
+    sql = "SELECT ledger_id FROM ledgers WHERE ledger_name = :ledger_name FETCH FIRST 1 ROW ONLY"
+    row = query_one(sql, {"ledger_name": ledger_name})
+    return bool(row)
+
+def validate_currency(currency: str) -> bool:
+    sql = "SELECT currency FROM currencies WHERE currency = :currency FETCH FIRST 1 ROW ONLY"
+    row = query_one(sql, {"currency": currency})
+    return bool(row)
+
 def call_glc_balance(
     ledger_name: str | None,
     period_name: str | None,
     actual_flag: str | None,
     account_string: str | None,
     period_type: str = "YTD",
-    currency_code: str = "USD"
+    currency_code: str = "USD",
+    hierarchy_id: int | None = None
 ) -> tuple[float | None, str | None]:
     session_id = str(random.randint(1000000, 9999999))
     sql = """
@@ -280,7 +346,7 @@ def call_glc_balance(
         l_fields(3) := :account_string; 
         l_hier(1)   := '';
         l_hier(2)   := '';
-        l_hier(3)   := 'GLC_HIER_1169';
+        l_hier(3)   := :hierarchy_table;
         glc_balances_pkg.get_balance(
             p_ledger_name => NVL(:ledger_name, 'US Primary Ledger'),
             p_period_name => :period_name,
@@ -315,6 +381,8 @@ def call_glc_balance(
             out_bal = cursor.var(oracledb.DB_TYPE_NUMBER)
             out_msg = cursor.var(str)
             try:
+                import time
+                start = time.perf_counter()
                 cursor.execute(sql, {
                     "session_id": session_id,
                     "ledger_name": ledger_name,
@@ -323,9 +391,12 @@ def call_glc_balance(
                     "currency_code": currency_code,
                     "period_type": period_type,
                     "account_string": account_string,
+                    "hierarchy_table": get_hierarchy_table_for_account(hierarchy_id=hierarchy_id),
                     "out_bal": out_bal,
                     "out_msg": out_msg,
                 })
+                duration = (time.perf_counter() - start) * 1000
+                print(f"[GLC] PL/SQL get_balance ({period_type}) took {duration:.1f}ms for account {account_string}")
                 val = out_bal.getvalue()
                 if val is not None:
                     return float(val), out_msg.getvalue()
@@ -338,7 +409,8 @@ def call_glc_drill(
     period_name: str | None,
     actual_flag: str | None,
     account_string: str | None,
-    drill_type: str = "journal"
+    drill_type: str = "journal",
+    hierarchy_id: int | None = None
 ) -> tuple[str | None, str | None]:
     process_id = random.randint(1000000, 9999999)
     session_id = str(process_id)
@@ -365,7 +437,7 @@ def call_glc_drill(
         l_fields(3) := :account_string;
         l_hier(1)   := '';
         l_hier(2)   := '';
-        l_hier(3)   := 'GLC_HIER_1169';
+        l_hier(3)   := :hierarchy_table;
         glc_drill_pkg.get_journal_dtl(
             p_ledger_name => NVL(:ledger_name, 'US Primary Ledger'),
             p_period_name => :period_name,
@@ -404,6 +476,7 @@ def call_glc_drill(
                     "actual_flag": actual_flag,
                     "account_string": account_string,
                     "process_id": process_id,
+                    "hierarchy_table": get_hierarchy_table_for_account(hierarchy_id=hierarchy_id),
                     "out_msg": out_msg,
                 })
                 conn.commit()

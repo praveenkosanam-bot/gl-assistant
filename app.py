@@ -7,6 +7,7 @@ import core_services
 import nlu_agent
 import finance_agent
 
+from core_services import AmbiguousHierarchyError
 app = Flask(__name__)
 
 @app.get("/")
@@ -62,9 +63,13 @@ def chat():
     try:
         started = time.perf_counter()
         routed = nlu_agent.resolve_question_with_llm(full_history, message, provider, api_key)
-        timings["route_ms"] = round((time.perf_counter() - started) * 1000, 1)
+        route_duration = (time.perf_counter() - started) * 1000
+        timings["route_ms"] = round(route_duration, 1)
+        print(f"[API] Routing (LLM) took {route_duration:.1f}ms")
     except Exception as exc: return jsonify({"error": str(exc)}), 500
     path = routed["api_path"]; pms = routed.get("params") or {}
+    if "hierarchy_id" in payload:
+        pms["hierarchy_id"] = payload["hierarchy_id"]
     if path == "/api/db/none":
         res = finance_agent.dispatch_db_api(path, pms)
         return jsonify({"reply": finance_agent.format_chat_reply(path, res), "routing": routed, "db_result": None, "timings": timings})
@@ -82,9 +87,20 @@ def chat():
     try:
         started = time.perf_counter()
         res = finance_agent.dispatch_db_api(path, pms)
-        timings["db_api_ms"] = round((time.perf_counter() - started) * 1000, 1)
+        db_duration = (time.perf_counter() - started) * 1000
+        timings["db_api_ms"] = round(db_duration, 1)
+        print(f"[API] DB API ({path}) took {db_duration:.1f}ms")
         r = finance_agent.format_chat_reply(path, res)
-    except Exception as exc: return jsonify({"error": f"Database API failed: {exc}", "routing": routed}), 500
+    except AmbiguousHierarchyError as exc:
+        return jsonify({
+            "reply": "I found multiple hierarchies for this field group. Please select one:",
+            "options": exc.options,
+            "routing": routed,
+            "timings": timings
+        })
+    except Exception as exc:
+        print(f"[API] DB API ({path}) failed: {exc}")
+        return jsonify({"error": f"Database API failed: {exc}", "routing": routed}), 500
     return jsonify({"reply": r, "routing": routed, "db_result": res, "timings": timings})
 
 # Wrapper endpoints for direct DB API access

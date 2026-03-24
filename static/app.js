@@ -61,19 +61,28 @@ async function loadHealth() {
   }
 }
 
-async function sendMessage(prompt) {
+async function sendMessage(prompt, hierarchyId = null) {
   const provider = document.getElementById("provider") ? document.getElementById("provider").value : "openai";
   const apiKey = document.getElementById("api_key") ? document.getElementById("api_key").value : "";
 
   addMessage("user", prompt);
-  history.push({ role: "user", content: prompt });
+  // Don't push to history if it's a retry with hierarchyId
+  if (!hierarchyId) {
+    history.push({ role: "user", content: prompt });
+  }
   messageInput.value = "";
 
   try {
     const response = await fetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: prompt, history, provider: provider, api_key: apiKey }),
+      body: JSON.stringify({ 
+        message: prompt, 
+        history, 
+        provider: provider, 
+        api_key: apiKey,
+        hierarchy_id: hierarchyId // Pass the selected hierarchy if we have it
+      }),
     });
     const payload = await response.json();
     if (!response.ok) {
@@ -81,7 +90,28 @@ async function sendMessage(prompt) {
     }
 
     addMessage("assistant", payload.reply);
-    history.push({ role: "assistant", content: payload.reply });
+    
+    // If the server asked to pick a hierarchy, show buttons
+    if (payload.options) {
+      const optionsContainer = document.createElement("div");
+      optionsContainer.style.marginTop = "10px";
+      optionsContainer.style.display = "flex";
+      optionsContainer.style.gap = "8px";
+      optionsContainer.style.flexWrap = "wrap";
+      
+      payload.options.forEach(opt => {
+        const btn = document.createElement("button");
+        btn.textContent = opt.name;
+        btn.className = "prompt-chip"; // reuse styles
+        btn.onclick = () => sendMessage(prompt, opt.id);
+        optionsContainer.appendChild(btn);
+      });
+      
+      const lastMessage = chatLog.lastElementChild;
+      lastMessage.querySelector(".message-body").appendChild(optionsContainer);
+    } else {
+      history.push({ role: "assistant", content: payload.reply });
+    }
   } catch (error) {
     addMessage("assistant", `Request failed: ${error.message}`);
   }

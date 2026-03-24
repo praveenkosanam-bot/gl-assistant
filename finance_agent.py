@@ -22,16 +22,40 @@ def annotate_ledger_metadata(result: dict[str, Any]) -> dict[str, Any]:
 def db_balance_by_ccid(params: dict[str, Any]) -> dict[str, Any]:
     ledger_name = get_ledger_name(params["ledger_id"])
     account_str = str(get_account_for_ccid(params["ccid"]) or params["ccid"])
-    ytd, ytd_msg = core_services.call_glc_balance(ledger_name=ledger_name, period_name=params["period_name"], actual_flag=params.get("actual_flag", "A"), account_string=account_str, period_type="YTD")
-    period_activity, activity_msg = core_services.call_glc_balance(ledger_name=ledger_name, period_name=params["period_name"], actual_flag=params.get("actual_flag", "A"), account_string=account_str, period_type="PTD")
-    return {"lookup_type": "ccid", "ledger_id": params["ledger_id"], "ledger_name": ledger_name, "period_name": params["period_name"], "ccid": params["ccid"], "account_number": account_str, "actual_flag": params.get("actual_flag", "A"), "ytd_balance": ytd, "period_activity": period_activity, "status_msg": ytd_msg or activity_msg, "resolved_from_seed": params.get("resolved_from_seed", False)}
+    period_name = params["period_name"]
+    currency_code = params.get("currency_code", "USD")
+
+    # Validations
+    if not core_services.validate_ledger(ledger_name):
+        return {"error": f"Invalid ledger name: {ledger_name}"}
+    if not core_services.validate_period(period_name, ledger_name):
+        return {"error": f"Invalid period '{period_name}' for ledger '{ledger_name}'"}
+    if not core_services.validate_currency(currency_code):
+        return {"error": f"Invalid currency code: {currency_code}"}
+
+    hid = params.get("hierarchy_id")
+    ytd, ytd_msg = core_services.call_glc_balance(ledger_name=ledger_name, period_name=period_name, actual_flag=params.get("actual_flag", "A"), account_string=account_str, period_type="YTD", hierarchy_id=hid, currency_code=currency_code)
+    period_activity, activity_msg = core_services.call_glc_balance(ledger_name=ledger_name, period_name=period_name, actual_flag=params.get("actual_flag", "A"), account_string=account_str, period_type="PTD", hierarchy_id=hid, currency_code=currency_code)
+    return {"lookup_type": "ccid", "ledger_id": params["ledger_id"], "ledger_name": ledger_name, "period_name": period_name, "ccid": params["ccid"], "account_number": account_str, "actual_flag": params.get("actual_flag", "A"), "ytd_balance": ytd, "period_activity": period_activity, "status_msg": ytd_msg or activity_msg, "resolved_from_seed": params.get("resolved_from_seed", False), "hierarchy_id": hid}
 
 def db_balance_by_account(params: dict[str, Any]) -> dict[str, Any]:
     ledger_name = get_ledger_name(params["ledger_id"])
-    ytd, ytd_msg = core_services.call_glc_balance(ledger_name=ledger_name, period_name=params["period_name"], actual_flag=params.get("actual_flag", "A"), account_string=params["account_number"], period_type="YTD")
-    period_activity, activity_msg = core_services.call_glc_balance(ledger_name=ledger_name, period_name=params["period_name"], actual_flag=params.get("actual_flag", "A"), account_string=params["account_number"], period_type="PTD")
-    seed = core_services.seed_lookup(account_number=params["account_number"], ledger_id=params["ledger_id"], period_name=params["period_name"], actual_flag=params.get("actual_flag", "A"))
-    return {"lookup_type": "account_number", "ledger_id": params["ledger_id"], "period_name": params["period_name"], "account_number": params["account_number"], "ccid": seed["ccid"] if seed else None, "actual_flag": params.get("actual_flag", "A"), "ytd_balance": float(ytd) if ytd is not None else None, "period_activity": float(period_activity) if period_activity is not None else None, "status_msg": ytd_msg or activity_msg, "resolved_from_seed": params.get("resolved_from_seed", False)}
+    period_name = params["period_name"]
+    currency_code = params.get("currency_code", "USD")
+
+    # Validations
+    if not core_services.validate_ledger(ledger_name):
+        return {"error": f"Invalid ledger name: {ledger_name}"}
+    if not core_services.validate_period(period_name, ledger_name):
+        return {"error": f"Invalid period '{period_name}' for ledger '{ledger_name}'"}
+    if not core_services.validate_currency(currency_code):
+        return {"error": f"Invalid currency code: {currency_code}"}
+
+    hid = params.get("hierarchy_id")
+    ytd, ytd_msg = core_services.call_glc_balance(ledger_name=ledger_name, period_name=period_name, actual_flag=params.get("actual_flag", "A"), account_string=params["account_number"], period_type="YTD", hierarchy_id=hid, currency_code=currency_code)
+    period_activity, activity_msg = core_services.call_glc_balance(ledger_name=ledger_name, period_name=period_name, actual_flag=params.get("actual_flag", "A"), account_string=params["account_number"], period_type="PTD", hierarchy_id=hid, currency_code=currency_code)
+    seed = core_services.seed_lookup(account_number=params["account_number"], ledger_id=params["ledger_id"], period_name=period_name, actual_flag=params.get("actual_flag", "A"))
+    return {"lookup_type": "account_number", "ledger_id": params["ledger_id"], "period_name": period_name, "account_number": params["account_number"], "ccid": seed["ccid"] if seed else None, "actual_flag": params.get("actual_flag", "A"), "ytd_balance": float(ytd) if ytd is not None else None, "period_activity": float(period_activity) if period_activity is not None else None, "status_msg": ytd_msg or activity_msg, "resolved_from_seed": params.get("resolved_from_seed", False), "hierarchy_id": hid}
 
 def db_balance_explain(params: dict[str, Any]) -> dict[str, Any]:
     where_filter = ["gb.ledger_id = :ledger_id", "gb.period_name = :period_name", "gb.actual_flag = :actual_flag"]
@@ -86,9 +110,21 @@ def db_balance_diagnostics(params: dict[str, Any]) -> dict[str, Any]:
 
 def db_journal_details(params: dict[str, Any]) -> dict[str, Any]:
     ledger_name = get_ledger_name(params.get("ledger_id", core_services.DEFAULT_LEDGER_ID))
+    period_name = params.get("period_name")
+    currency_code = params.get("currency_code", "USD")
+
+    # Validations
+    if not core_services.validate_ledger(ledger_name):
+        return {"error": f"Invalid ledger name: {ledger_name}"}
+    if period_name and not core_services.validate_period(period_name, ledger_name):
+        return {"error": f"Invalid period '{period_name}' for ledger '{ledger_name}'"}
+    if not core_services.validate_currency(currency_code):
+        return {"error": f"Invalid currency code: {currency_code}"}
+
     account_str = params.get("account_number") or str(get_account_for_ccid(params.get("ccid")))
-    clob, msg = core_services.call_glc_drill(ledger_name=ledger_name, period_name=params.get("period_name"), actual_flag=params.get("actual_flag", "A"), account_string=account_str)
-    return {"ledger_id": params.get("ledger_id"), "ledger_name": ledger_name, "period_name": params.get("period_name"), "account_number": account_str, "raw_drill_clob": clob, "drill_status_msg": msg}
+    hid = params.get("hierarchy_id")
+    clob, msg = core_services.call_glc_drill(ledger_name=ledger_name, period_name=period_name, actual_flag=params.get("actual_flag", "A"), account_string=account_str, hierarchy_id=hid)
+    return {"ledger_id": params.get("ledger_id"), "ledger_name": ledger_name, "period_name": period_name, "account_number": account_str, "raw_drill_clob": clob, "drill_status_msg": msg, "hierarchy_id": hid}
 
 def dispatch_db_api(api_path: str, params: dict[str, Any]) -> dict[str, Any]:
     map = {"/api/db/balance/by-ccid": db_balance_by_ccid, "/api/db/balance/by-account": db_balance_by_account, "/api/db/balance/diff": db_balance_diff, "/api/db/balance/trend": db_balance_trend, "/api/db/balance/explain": db_balance_explain, "/api/db/balance/highlights": db_balance_highlights, "/api/db/balance/diagnostics": db_balance_diagnostics}

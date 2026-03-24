@@ -243,15 +243,19 @@ def resolve_question_with_llm(history: list[dict[str, str]], question: str, prov
     prompt = "\n".join(transcript) + f"\n\nLatest user question: {question}"
     session = requests.Session(); session.trust_env = False
     try:
+        import time
+        start_llm = time.perf_counter()
         if provider == "anthropic":
             resp = session.post("https://api.anthropic.com/v1/messages", headers={"x-api-key": api_key, "anthropic-version": "2023-06-01", "Content-Type": "application/json"}, json={"model": "claude-3-5-sonnet-20241022", "system": SYSTEM_PROMPT + "\n" + ROUTING_INSTRUCTIONS, "messages": [{"role": "user", "content": prompt}], "max_tokens": 1024, "temperature": 0.0}, timeout=60)
             resp.raise_for_status(); text = resp.json().get("content", [{}])[0].get("text", "")
         elif provider == "gemini":
-            resp = session.post(f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}", headers={"Content-Type": "application/json"}, json={"systemInstruction": {"parts": [{"text": SYSTEM_PROMPT + "\n" + ROUTING_INSTRUCTIONS}]}, "contents": [{"role": "user", "parts": [{"text": prompt}]}], "generationConfig": {"temperature": 0.0}}, timeout=60)
+            resp = session.post(f"https://generativelanguage.googleapis.com/v1beta/models/{core_services.GEMINI_MODEL}:generateContent?key={api_key}", headers={"Content-Type": "application/json"}, json={"systemInstruction": {"parts": [{"text": SYSTEM_PROMPT + "\n" + ROUTING_INSTRUCTIONS}]}, "contents": [{"role": "user", "parts": [{"text": prompt}]}], "generationConfig": {"temperature": 0.0}}, timeout=60)
             resp.raise_for_status(); text = resp.json().get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
         else:
             resp = session.post(core_services.OPENAI_RESPONSES_URL, headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}, json={"model": core_services.OPENAI_MODEL, "instructions": SYSTEM_PROMPT + "\n" + ROUTING_INSTRUCTIONS, "input": [{"role": "user", "content": [{"type": "input_text", "text": prompt}]}]}, timeout=60)
             resp.raise_for_status(); text = extract_output_text(resp.json())
+        llm_duration = (time.perf_counter() - start_llm) * 1000
+        print(f"[LLM] {provider.upper()} request took {llm_duration:.1f}ms")
         if not text: raise RuntimeError(f"{provider} response did not contain routing output.")
         try: routed = json.loads(text)
         except:
