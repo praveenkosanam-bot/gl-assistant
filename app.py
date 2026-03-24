@@ -6,6 +6,7 @@ import requests
 import core_services
 import nlu_agent
 import finance_agent
+import rag_engine
 
 from core_services import AmbiguousHierarchyError
 app = Flask(__name__)
@@ -21,6 +22,8 @@ def health():
         row = core_services.query_one("SELECT 1 FROM dual")
         db_ok = bool(row)
     except Exception as exc: db_error = str(exc)
+    vectorstore = rag_engine.load_vectorstore()
+    rag_doc_count = len((vectorstore or {}).get("documents", []))
     return jsonify({
         "providers_supported": ["openai", "anthropic", "gemini"],
         "openai_model": core_services.OPENAI_MODEL,
@@ -32,6 +35,11 @@ def health():
         "openai_key_set": bool(core_services.OPENAI_API_KEY),
         "anthropic_key_set": bool(core_services.ANTHROPIC_API_KEY),
         "gemini_key_set": bool(core_services.GEMINI_API_KEY),
+        "rag_enabled": True,
+        "rag_vectorstore_present": bool(vectorstore),
+        "rag_knowledge_dir": rag_engine.KNOWLEDGE_DIR,
+        "rag_vectorstore_path": rag_engine.VECTORSTORE_PATH,
+        "rag_documents_indexed": rag_doc_count,
     })
 
 @app.post("/api/nlu/parse")
@@ -72,16 +80,26 @@ def chat():
         pms["hierarchy_id"] = payload["hierarchy_id"]
     if path == "/api/db/none":
         res = finance_agent.dispatch_db_api(path, pms)
-        return jsonify({"reply": finance_agent.format_chat_reply(path, res), "routing": routed, "db_result": None, "timings": timings})
+        reply = finance_agent.generate_rag_reply(message, path, res, provider, api_key)
+        return jsonify({"reply": reply, "routing": routed, "db_result": None, "timings": timings})
     if path == "/api/db/unsupported":
         db_res = {"reason": routed.get("reason", "Endpoint unsupported.")}
-        return jsonify({"reply": finance_agent.format_chat_reply(path, db_res), "routing": routed, "db_result": None, "timings": timings})
+        reply = finance_agent.generate_rag_reply(message, path, db_res, provider, api_key)
+        return jsonify({"reply": reply, "routing": routed, "db_result": None, "timings": timings})
     if path == "/api/db/journal/details":
-        db_res = finance_agent.db_journal_details(pms)
-        m = db_res.get("drill_status_msg", ""); c = db_res.get("raw_drill_clob", "")
-        if not c and "error" in (m or "").lower(): r = f"Error drilling into journals for {db_res.get('account_number')}: {m}"
-        else: r = f"Journal Drilldown completed. Detailed payload generated internally (length: {(len(c) if c else 0)} chars)."
-        return jsonify({"reply": r, "routing": routed, "db_result": db_res, "timings": timings})
+        try:
+            db_res = finance_agent.db_journal_details(pms)
+            m = db_res.get("drill_status_msg", ""); c = db_res.get("raw_drill_clob", "")
+            if not c and "error" in (m or "").lower(): r = f"Error drilling into journals for {db_res.get('account_number')}: {m}"
+            else: r = f"Journal Drilldown completed. Detailed payload generated internally (length: {(len(c) if c else 0)} chars)."
+            return jsonify({"reply": r, "routing": routed, "db_result": db_res, "timings": timings})
+        except AmbiguousHierarchyError as exc:
+            return jsonify({
+                "reply": "I found multiple hierarchies for this field group. Please select one:",
+                "options": exc.options,
+                "routing": routed,
+                "timings": timings
+            })
     err = nlu_agent.validate_route_params(path, pms)
     if err: return jsonify({"error": err, "routing": routed}), 400
     try:
@@ -90,7 +108,7 @@ def chat():
         db_duration = (time.perf_counter() - started) * 1000
         timings["db_api_ms"] = round(db_duration, 1)
         print(f"[API] DB API ({path}) took {db_duration:.1f}ms")
-        r = finance_agent.format_chat_reply(path, res)
+        r = finance_agent.generate_rag_reply(message, path, res, provider, api_key)
     except AmbiguousHierarchyError as exc:
         return jsonify({
             "reply": "I found multiple hierarchies for this field group. Please select one:",

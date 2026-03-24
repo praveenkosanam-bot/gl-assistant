@@ -161,6 +161,8 @@ def complete_lookup_params(question: str, params: dict[str, Any], history: list[
     if completed.get("period_to"): completed["period_to"] = core_services.normalize_period(completed["period_to"])
     if any(completed.get(k) is not None for k in ("ccid", "account_number")) and any(completed.get(k) is None for k in ("ledger_id", "period_name")):
         seed = core_services.seed_lookup(account_number=completed.get("account_number"), ccid=completed.get("ccid"), ledger_id=completed.get("ledger_id"), period_name=completed.get("period_name"), actual_flag=completed.get("actual_flag"))
+        if not seed:
+            seed = core_services.seed_lookup(account_number=completed.get("account_number"), ccid=completed.get("ccid"), ledger_id=completed.get("ledger_id"), period_name=completed.get("period_name"), actual_flag=None)
         if seed:
             for k, v in seed.items(): completed.setdefault(k, v)
             completed["resolved_from_seed"] = True
@@ -180,7 +182,7 @@ def validate_route_params(api_path: str, params: dict[str, Any]) -> str | None:
     required = req.get(api_path)
     if required is None: return None
     missing = [f for f in required if params.get(f) is None]
-    if api_path in {"/api/db/balance/diff", "/api/db/balance/explain"} and params.get("ccid") is None and params.get("account_number") is None:
+    if api_path in {"/api/db/balance/diff", "/api/db/balance/explain", "/api/db/journal/details"} and params.get("ccid") is None and params.get("account_number") is None:
         missing.append("ccid or account_number")
     if api_path == "/api/db/balance/diagnostics" and (params.get("ledger_id") is None or params.get("period_name") is None or (params.get("ccid") is None and params.get("account_number") is None)):
         missing.append("required fields")
@@ -262,7 +264,7 @@ def resolve_question_with_llm(history: list[dict[str, str]], question: str, prov
             m = re.search(r"\{.*\}", text, re.DOTALL)
             if not m: raise RuntimeError(f"{provider} route output was not valid JSON: {text}")
             routed = json.loads(m.group(0))
-        if routed.get("api_path") not in SUPPORTED_API_PATHS | {"/api/db/none", "/api/db/unsupported"}:
+        if routed.get("api_path") not in SUPPORTED_API_PATHS | {"/api/db/none", "/api/db/unsupported", "/api/db/journal/details"}:
             raise RuntimeError(f"{provider} returned unsupported api path: {routed.get('api_path')}")
         routed["params"] = complete_lookup_params(question, routed.get("params") or {}, history)
         routed["routing_mode"] = provider

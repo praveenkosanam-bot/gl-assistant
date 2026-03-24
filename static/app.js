@@ -3,8 +3,110 @@ const messageInput = document.getElementById("message");
 const chatLog = document.getElementById("chat-log");
 const template = document.getElementById("message-template");
 const statusStrip = document.getElementById("status-strip");
+const hierarchyAutocomplete = document.getElementById("hierarchy-autocomplete");
+const hierarchyAutocompleteLabel = document.getElementById("hierarchy-autocomplete-label");
+const hierarchyAutocompleteList = document.getElementById("hierarchy-autocomplete-list");
 
 const history = [];
+let pendingHierarchySelection = null;
+
+function normalizeText(text) {
+  return (text || "").trim().toLowerCase();
+}
+
+function resolveHierarchySelection(followUpText) {
+  if (!pendingHierarchySelection) {
+    return null;
+  }
+
+  const normalized = normalizeText(followUpText);
+  if (!normalized) {
+    return null;
+  }
+
+  const exact = pendingHierarchySelection.options.find((opt) => normalizeText(opt.name) === normalized);
+  if (exact) {
+    return exact;
+  }
+
+  const contains = pendingHierarchySelection.options.find((opt) => {
+    const name = normalizeText(opt.name);
+    return normalized.includes(name) || name.includes(normalized);
+  });
+  if (contains) {
+    return contains;
+  }
+
+  const keywords = normalized
+    .replace(/^use\s+(the\s+)?(one\s+)?(with\s+)?/, "")
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean);
+
+  if (!keywords.length) {
+    return null;
+  }
+
+  return pendingHierarchySelection.options.find((opt) => {
+    const name = normalizeText(opt.name);
+    return keywords.every((keyword) => name.includes(keyword));
+  }) || null;
+}
+
+function getHierarchyMatches(inputText) {
+  if (!pendingHierarchySelection) {
+    return [];
+  }
+
+  const normalized = normalizeText(inputText);
+  if (!normalized) {
+    return pendingHierarchySelection.options.slice(0, 8);
+  }
+
+  return pendingHierarchySelection.options
+    .filter((opt) => {
+      const name = normalizeText(opt.name);
+      return name.includes(normalized) || normalized.includes(name);
+    })
+    .slice(0, 8);
+}
+
+function clearHierarchyAutocomplete() {
+  hierarchyAutocomplete.hidden = true;
+  hierarchyAutocompleteList.innerHTML = "";
+}
+
+function renderHierarchyAutocomplete(inputText = "") {
+  if (!pendingHierarchySelection) {
+    clearHierarchyAutocomplete();
+    return;
+  }
+
+  const matches = getHierarchyMatches(inputText);
+  hierarchyAutocompleteLabel.textContent = "Select a hierarchy or keep typing to filter";
+  hierarchyAutocompleteList.innerHTML = "";
+
+  if (!matches.length) {
+    hierarchyAutocomplete.hidden = false;
+    const empty = document.createElement("p");
+    empty.className = "autocomplete-label";
+    empty.textContent = "No matching hierarchy names.";
+    hierarchyAutocompleteList.appendChild(empty);
+    return;
+  }
+
+  matches.forEach((opt, index) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.textContent = opt.name;
+    btn.className = `autocomplete-option${index === 0 ? " active" : ""}`;
+    btn.onclick = () => {
+      messageInput.value = opt.name;
+      sendMessage(opt.name, opt.id);
+    };
+    hierarchyAutocompleteList.appendChild(btn);
+  });
+  hierarchyAutocomplete.hidden = false;
+}
 
 function addMessage(role, text) {
   const node = template.content.firstElementChild.cloneNode(true);
@@ -64,24 +166,28 @@ async function loadHealth() {
 async function sendMessage(prompt, hierarchyId = null) {
   const provider = document.getElementById("provider") ? document.getElementById("provider").value : "openai";
   const apiKey = document.getElementById("api_key") ? document.getElementById("api_key").value : "";
+  const selectedHierarchy = !hierarchyId ? resolveHierarchySelection(prompt) : null;
+  const effectiveHierarchyId = hierarchyId ?? selectedHierarchy?.id ?? null;
+  const effectivePrompt = effectiveHierarchyId && pendingHierarchySelection ? pendingHierarchySelection.originalPrompt : prompt;
 
   addMessage("user", prompt);
-  // Don't push to history if it's a retry with hierarchyId
-  if (!hierarchyId) {
+  // Don't push hierarchy follow-up text into history; resend the original question with hierarchy_id.
+  if (!effectiveHierarchyId) {
     history.push({ role: "user", content: prompt });
   }
   messageInput.value = "";
+  clearHierarchyAutocomplete();
 
   try {
     const response = await fetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ 
-        message: prompt, 
+        message: effectivePrompt, 
         history, 
         provider: provider, 
         api_key: apiKey,
-        hierarchy_id: hierarchyId // Pass the selected hierarchy if we have it
+        hierarchy_id: effectiveHierarchyId
       }),
     });
     const payload = await response.json();
@@ -93,6 +199,11 @@ async function sendMessage(prompt, hierarchyId = null) {
     
     // If the server asked to pick a hierarchy, show buttons
     if (payload.options) {
+      pendingHierarchySelection = {
+        originalPrompt: effectivePrompt,
+        options: payload.options,
+      };
+      renderHierarchyAutocomplete("");
       const optionsContainer = document.createElement("div");
       optionsContainer.style.marginTop = "10px";
       optionsContainer.style.display = "flex";
@@ -103,13 +214,15 @@ async function sendMessage(prompt, hierarchyId = null) {
         const btn = document.createElement("button");
         btn.textContent = opt.name;
         btn.className = "prompt-chip"; // reuse styles
-        btn.onclick = () => sendMessage(prompt, opt.id);
+        btn.onclick = () => sendMessage(opt.name, opt.id);
         optionsContainer.appendChild(btn);
       });
       
       const lastMessage = chatLog.lastElementChild;
       lastMessage.querySelector(".message-body").appendChild(optionsContainer);
     } else {
+      pendingHierarchySelection = null;
+      clearHierarchyAutocomplete();
       history.push({ role: "assistant", content: payload.reply });
     }
   } catch (error) {
@@ -124,6 +237,13 @@ form.addEventListener("submit", async (event) => {
     return;
   }
   await sendMessage(prompt);
+});
+
+messageInput.addEventListener("input", () => {
+  if (!pendingHierarchySelection) {
+    return;
+  }
+  renderHierarchyAutocomplete(messageInput.value);
 });
 
 document.querySelectorAll(".prompt-chip").forEach((button) => {

@@ -1,6 +1,96 @@
 import json
 from typing import Any
+import requests
+
 import core_services
+import rag_engine
+
+RAG_SYSTEM_PROMPT = """You are GL Assistant, a concise Oracle General Ledger support assistant.
+
+Use the retrieved knowledge snippets when they are relevant.
+If database result data is provided, treat it as the source of truth for numeric answers.
+Do not invent balances, ledger IDs, package behavior, or API capabilities.
+If the knowledge base does not support the answer, say so briefly.
+Keep answers short, direct, and useful.
+"""
+
+def extract_output_text(payload: dict[str, Any]) -> str:
+    if payload.get("output_text"): return payload["output_text"]
+    texts = []
+    for item in payload.get("output", []):
+        for content in item.get("content", []):
+            if content.get("type") in {"output_text", "text"}:
+                t = content.get("text")
+                if isinstance(t, str): texts.append(t)
+                elif isinstance(t, dict) and t.get("value"): texts.append(t["value"])
+    return "\n".join(texts).strip()
+
+def resolve_provider_key(provider: str, api_key: str | None) -> str | None:
+    if api_key:
+        return api_key
+    if provider == "openai":
+        return core_services.OPENAI_API_KEY
+    if provider == "anthropic":
+        return core_services.ANTHROPIC_API_KEY
+    if provider == "gemini":
+        return core_services.GEMINI_API_KEY
+    return None
+
+def generate_rag_reply(question: str, api_path: str, result: dict[str, Any], provider: str = "gemini", api_key: str = "") -> str:
+    if api_path not in {"/api/db/none", "/api/db/unsupported"}:
+        return format_chat_reply(api_path, result)
+    provider = (provider or "gemini").lower()
+    resolved_key = resolve_provider_key(provider, api_key)
+    if not question or not resolved_key:
+        return format_chat_reply(api_path, result)
+
+    try:
+        rag_context = rag_engine.build_rag_context(question)
+    except Exception:
+        rag_context = ""
+
+    if not rag_context:
+        return format_chat_reply(api_path, result)
+
+    prompt = (
+        f"User question: {question}\n\n"
+        f"API path: {api_path}\n\n"
+        f"Database/API result JSON:\n{json.dumps(result, default=str)}\n\n"
+        f"Retrieved knowledge:\n{rag_context}\n\n"
+        "Answer the user using the database result when present and the retrieved knowledge when relevant."
+    )
+    session = requests.Session(); session.trust_env = False
+    try:
+        if provider == "anthropic":
+            resp = session.post(
+                "https://api.anthropic.com/v1/messages",
+                headers={"x-api-key": resolved_key, "anthropic-version": "2023-06-01", "Content-Type": "application/json"},
+                json={"model": "claude-3-5-sonnet-20241022", "system": RAG_SYSTEM_PROMPT, "messages": [{"role": "user", "content": prompt}], "max_tokens": 400, "temperature": 0.1},
+                timeout=60,
+            )
+            resp.raise_for_status()
+            text = resp.json().get("content", [{}])[0].get("text", "")
+        elif provider == "gemini":
+            resp = session.post(
+                f"https://generativelanguage.googleapis.com/v1beta/models/{core_services.GEMINI_MODEL}:generateContent?key={resolved_key}",
+                headers={"Content-Type": "application/json"},
+                json={"systemInstruction": {"parts": [{"text": RAG_SYSTEM_PROMPT}]}, "contents": [{"role": "user", "parts": [{"text": prompt}]}], "generationConfig": {"temperature": 0.1}},
+                timeout=60,
+            )
+            resp.raise_for_status()
+            text = resp.json().get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+        else:
+            resp = session.post(
+                core_services.OPENAI_RESPONSES_URL,
+                headers={"Authorization": f"Bearer {resolved_key}", "Content-Type": "application/json"},
+                json={"model": core_services.OPENAI_MODEL, "instructions": RAG_SYSTEM_PROMPT, "input": [{"role": "user", "content": [{"type": "input_text", "text": prompt}]}]},
+                timeout=60,
+            )
+            resp.raise_for_status()
+            text = extract_output_text(resp.json())
+        return text.strip() or format_chat_reply(api_path, result)
+    except Exception:
+        return format_chat_reply(api_path, result)
 
 def get_account_for_ccid(ccid: int) -> str | None:
     row = core_services.query_one("SELECT gcc.segment3 FROM gl_code_combinations gcc WHERE gcc.code_combination_id = :ccid", {"ccid": ccid})

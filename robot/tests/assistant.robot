@@ -15,6 +15,7 @@ ${COMPARE_PERIOD}          02-23
 ${ACTUAL_FLAG}             A
 ${ACCOUNT_NUMBER}          11200
 ${TREND_LENGTH}            4
+${HIERARCHY_HINT}          CORPORATE
 
 *** Test Cases ***
 Question Inventory Segments Period Routes To Account API
@@ -52,11 +53,11 @@ Question Inventory High Level Routes To Highlights API
     ${top_accounts}=    Get From Dictionary    ${response}[body][db_result]    top_accounts
     Should Not Be Empty    ${top_accounts}
 
-Journal Question Is Marked Unsupported
+Journal Question Returns Drill Route
     ${payload}=    Create Dictionary    message=Show journals for Account ${ACCOUNT_NUMBER} in ${PERIOD_NAME}.    history=${EMPTY_HISTORY}
     ${response}=    Call Assistant API    ${payload}
-    Should Be Equal    ${response}[body][routing][api_path]    /api/db/unsupported
-    Should Contain    ${response}[body][reply]    not implemented yet
+    Should Be Equal    ${response}[body][routing][api_path]    /api/db/journal/details
+    Dictionary Should Contain Key    ${response}[body]    db_result
 
 Lightweight NLP Parse Returns Intent And Route
     ${payload}=    Create Dictionary    message=Compare ${PERIOD_NAME} vs ${COMPARE_PERIOD} for account ${ACCOUNT_NUMBER} on ${LEDGER_NAME}.
@@ -66,7 +67,7 @@ Lightweight NLP Parse Returns Intent And Route
     Should Be Equal    ${response}[body][routing][api_path]    /api/db/balance/diff
 
 Direct Account DB API Returns Balance
-    ${payload}=    Create Dictionary    period_name=${PERIOD_NAME}    account_number=${ACCOUNT_NUMBER}    actual_flag=${ACTUAL_FLAG}
+    ${payload}=    Create Dictionary    period_name=${PERIOD_NAME}    account_number=${ACCOUNT_NUMBER}    actual_flag=${ACTUAL_FLAG}    hierarchy_id=${PREFERRED_HIERARCHY_ID}
     ${response}=    Call JSON API    POST    ${APP_URL}/api/db/balance/by-account    ${payload}
     Should Be Equal As Integers    ${response}[status]    200
     Should Be Equal    ${response}[body][account_number]    ${ACCOUNT_NUMBER}
@@ -82,6 +83,7 @@ Direct Trend DB API Returns Requested Count
 *** Keywords ***
 Initialize Assistant Suite
     Connect To Oracle
+    Set Preferred Hierarchy
     ${rows}=    Query    SELECT gb.code_combination_id FROM gl_balances gb JOIN gl_code_combinations gcc ON gcc.code_combination_id = gb.code_combination_id WHERE gb.period_name = '${PERIOD_NAME}' AND gb.actual_flag = '${ACTUAL_FLAG}' AND gcc.segment3 = '${ACCOUNT_NUMBER}' FETCH FIRST 1 ROWS ONLY
     Should Not Be Empty    ${rows}
     ${compare_rows}=    Query    SELECT 1 FROM gl_balances gb JOIN gl_code_combinations gcc ON gcc.code_combination_id = gb.code_combination_id WHERE gb.period_name = '${COMPARE_PERIOD}' AND gb.actual_flag = '${ACTUAL_FLAG}' AND gcc.segment3 = '${ACCOUNT_NUMBER}' FETCH FIRST 1 ROWS ONLY
@@ -122,7 +124,20 @@ Assistant Health Should Be OK
 Call Assistant API
     [Arguments]    ${payload}
     ${response}=    Call JSON API    POST    ${APP_URL}/api/chat    ${payload}
+    ${has_options}=    Run Keyword And Return Status    Dictionary Should Contain Key    ${response}[body]    options
+    IF    ${has_options}
+        ${options}=    Get From Dictionary    ${response}[body]    options
+        ${hierarchy_id}=    Evaluate    next((item["id"] for item in $options if "${HIERARCHY_HINT}".lower() in item.get("name", "").lower()), $options[0]["id"])
+        Set To Dictionary    ${payload}    hierarchy_id=${hierarchy_id}
+        ${response}=    Call JSON API    POST    ${APP_URL}/api/chat    ${payload}
+    END
     RETURN    ${response}
+
+Set Preferred Hierarchy
+    ${rows}=    Query    SELECT hierarchy_id, hierarchy_name FROM glc_hierarchies WHERE UPPER(hierarchy_name) LIKE '%${HIERARCHY_HINT}%' FETCH FIRST 1 ROWS ONLY
+    Should Not Be Empty    ${rows}
+    ${preferred}=    Set Variable    ${rows[0]}
+    Set Suite Variable    ${PREFERRED_HIERARCHY_ID}    ${preferred[0]}
 
 Call JSON API
     [Arguments]    ${method}    ${url}    ${payload}=${None}

@@ -255,7 +255,7 @@ def extract_filters(message: str) -> dict[str, Any]:
 
     if "account_number" not in results and "ccid" not in results:
         lower_message = message.lower()
-        if any(token in lower_message for token in ("balance", "account", "period", "ytd", "activity", "actuals", "budget", "encumbrance", "trend", "journal")):
+        if any(token in lower_message for token in ("balance", "account", "period", "ytd", "activity", "actuals", "budget", "encumbrance", "trend", "journal", "change", "changed", "compare", "break", "breakdown", "debit", "credit")):
             bare_number_match = re.search(r"(?<!\d)(\d{4,6})(?!\d)", message)
             if bare_number_match:
                 results["account_number"] = bare_number_match.group(1)
@@ -268,18 +268,26 @@ def extract_filters(message: str) -> dict[str, Any]:
 
     if "period_name" not in results and "period_from" not in results:
         try:
-            row = query_one(
-                "SELECT MAX(period_name) FROM gl_balances WHERE ledger_id = :lid",
-                {"lid": DEFAULT_LEDGER_ID},
-            )
-            if row and row[0]:
-                latest = str(row[0])
-                if re.search(r"\b(this month|this period|current period|current month)\b", lower_message):
-                    results["period_name"] = latest
-                elif re.search(r"\b(recently|last period|recent)\b", lower_message):
-                    results["period_name"] = latest
-                    results.setdefault("n", 4)
-        except Exception: pass
+            if re.search(r"\b(this month|this period|current period|current month|recently|last period|recent)\b", lower_message):
+                seed = seed_lookup(
+                    account_number=results.get("account_number"),
+                    ccid=results.get("ccid"),
+                    ledger_id=results.get("ledger_id", DEFAULT_LEDGER_ID),
+                    period_name=None,
+                    actual_flag=results.get("actual_flag"),
+                ) or seed_lookup(
+                    account_number=results.get("account_number"),
+                    ccid=results.get("ccid"),
+                    ledger_id=results.get("ledger_id", DEFAULT_LEDGER_ID),
+                    period_name=None,
+                    actual_flag=None,
+                )
+                if seed and seed.get("period_name"):
+                    results["period_name"] = str(seed["period_name"])
+                    if re.search(r"\b(recently|last period|recent)\b", lower_message):
+                        results.setdefault("n", 4)
+        except Exception:
+            pass
 
     if "activity" in lower_message: results["sort_by"] = "activity"
     if "account_number" not in results:
@@ -323,6 +331,7 @@ def call_glc_balance(
     hierarchy_id: int | None = None
 ) -> tuple[float | None, str | None]:
     session_id = str(random.randint(1000000, 9999999))
+    hierarchy_table = get_hierarchy_table_for_account(hierarchy_id=hierarchy_id)
     sql = """
     DECLARE
         l_fields glc_utility.varchar2_tab;
@@ -391,7 +400,7 @@ def call_glc_balance(
                     "currency_code": currency_code,
                     "period_type": period_type,
                     "account_string": account_string,
-                    "hierarchy_table": get_hierarchy_table_for_account(hierarchy_id=hierarchy_id),
+                    "hierarchy_table": hierarchy_table,
                     "out_bal": out_bal,
                     "out_msg": out_msg,
                 })
@@ -414,6 +423,7 @@ def call_glc_drill(
 ) -> tuple[str | None, str | None]:
     process_id = random.randint(1000000, 9999999)
     session_id = str(process_id)
+    hierarchy_table = get_hierarchy_table_for_account(hierarchy_id=hierarchy_id)
     sql = """
     DECLARE
         l_fields glc_utility.varchar2_tab;
@@ -476,7 +486,7 @@ def call_glc_drill(
                     "actual_flag": actual_flag,
                     "account_string": account_string,
                     "process_id": process_id,
-                    "hierarchy_table": get_hierarchy_table_for_account(hierarchy_id=hierarchy_id),
+                    "hierarchy_table": hierarchy_table,
                     "out_msg": out_msg,
                 })
                 conn.commit()

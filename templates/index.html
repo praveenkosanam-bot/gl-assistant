@@ -52,6 +52,10 @@
         <form class="composer" id="chat-form" novalidate>
           <label class="sr-only" for="message">Message</label>
           <textarea id="message" name="message" rows="3" placeholder="Ask about balances or API usage..." required></textarea>
+          <div class="autocomplete-panel" id="hierarchy-autocomplete" hidden>
+            <p class="autocomplete-label" id="hierarchy-autocomplete-label">Select a hierarchy</p>
+            <div class="autocomplete-list" id="hierarchy-autocomplete-list"></div>
+          </div>
           <div class="settings-row" style="margin-bottom: 15px; display: flex; gap: 10px;">
             <select id="provider" name="provider" style="padding: 8px; border-radius: 4px; border: 1px solid #ccc;">
               <option value="openai">OpenAI</option>

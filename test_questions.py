@@ -9,6 +9,7 @@ import sys, os, json, time, re, requests, yaml
 sys.path.append(os.getcwd())
 
 BASE_URL = "http://127.0.0.1:5000"
+DEFAULT_HIERARCHY_HINT = os.getenv("TEST_HIERARCHY_HINT", "CORPORATE").strip().lower()
 
 def load_questions():
     """Load all utterances from the YAML, tagged by intent."""
@@ -20,6 +21,15 @@ def load_questions():
             questions.append({"intent": intent["name"], "question": utt})
     return questions
 
+def choose_hierarchy(options: list[dict]) -> dict | None:
+    if not options:
+        return None
+    if DEFAULT_HIERARCHY_HINT:
+        for option in options:
+            if DEFAULT_HIERARCHY_HINT in (option.get("name", "").lower()):
+                return option
+    return options[0]
+
 def ask(question: str) -> dict:
     """Send a question to /api/chat (no LLM key – rule-based routing)."""
     try:
@@ -28,7 +38,17 @@ def ask(question: str) -> dict:
             json={"message": question, "provider": "openai", "api_key": ""},
             timeout=30,
         )
-        return {"status": resp.status_code, "body": resp.json() if resp.ok else {"error": resp.text}}
+        body = resp.json() if resp.ok else {"error": resp.text}
+        if resp.ok and body.get("options"):
+            choice = choose_hierarchy(body.get("options") or [])
+            if choice:
+                resp = requests.post(
+                    f"{BASE_URL}/api/chat",
+                    json={"message": question, "provider": "openai", "api_key": "", "hierarchy_id": choice.get("id")},
+                    timeout=30,
+                )
+                body = resp.json() if resp.ok else {"error": resp.text}
+        return {"status": resp.status_code, "body": body}
     except requests.RequestException as e:
         return {"status": "ERROR", "body": {"error": str(e)}}
 
