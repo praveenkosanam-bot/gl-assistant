@@ -8,15 +8,121 @@ const hierarchyAutocomplete = document.getElementById("hierarchy-autocomplete");
 const hierarchyAutocompleteLabel = document.getElementById("hierarchy-autocomplete-label");
 const hierarchyAutocompleteList = document.getElementById("hierarchy-autocomplete-list");
 
+const setupBtn = document.getElementById("setup-btn");
+const sessionContextDisplay = document.getElementById("session-context-display");
+const sessionRespPill = document.getElementById("session-resp-pill");
+const sessionLedgerPill = document.getElementById("session-ledger-pill");
+const sessionHierarchyPill = document.getElementById("session-hierarchy-pill");
+
 const history = [];
 let pendingHierarchySelection = null;
 let isLoading = false;
+let sessionContext = { role_id: null, role_name: null, ledger_id: null, ledger_name: null, hierarchy_id: null, hierarchy_name: null };
+
+// ── Chat-based setup flow ──
+let setupPhase = null; // null | 'responsibility' | 'ledger'
+let setupSelectedResp = null;
+
+function startSetupFlow() {
+  setupPhase = 'responsibility';
+  setupSelectedResp = null;
+  addMessage("assistant", "Type a responsibility name to search:");
+  renderSetupAutocomplete("");
+  messageInput.focus();
+}
+
+function getSetupMatches(inputText) {
+  const normalized = normalizeText(inputText);
+  if (setupPhase === 'responsibility') {
+    const items = window.LEDGER_DATA?.responsibilities || [];
+    if (!normalized) return items.slice(0, 8);
+    return items.filter(r => normalizeText(r.name).includes(normalized)).slice(0, 8);
+  }
+  if (setupPhase === 'ledger' && setupSelectedResp) {
+    const items = setupSelectedResp.ledgers || [];
+    if (!normalized) return items.slice(0, 8);
+    return items.filter(l => normalizeText(l.name).includes(normalized)).slice(0, 8);
+  }
+  return [];
+}
+
+function renderSetupAutocomplete(inputText) {
+  if (!setupPhase) { clearHierarchyAutocomplete(); return; }
+  const matches = getSetupMatches(inputText);
+  hierarchyAutocompleteLabel.textContent = setupPhase === 'responsibility'
+    ? "Select a responsibility"
+    : "Select a ledger";
+  hierarchyAutocompleteList.innerHTML = "";
+
+  if (!matches.length) {
+    hierarchyAutocomplete.hidden = false;
+    const empty = document.createElement("p");
+    empty.className = "autocomplete-label";
+    empty.textContent = "No matches found.";
+    hierarchyAutocompleteList.appendChild(empty);
+    return;
+  }
+
+  matches.forEach((item, index) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.textContent = item.name;
+    btn.className = `autocomplete-option${index === 0 ? " active" : ""}`;
+    btn.onclick = () => selectSetupItem(item);
+    hierarchyAutocompleteList.appendChild(btn);
+  });
+  hierarchyAutocomplete.hidden = false;
+}
+
+function selectSetupItem(item) {
+  clearHierarchyAutocomplete();
+  messageInput.value = "";
+  if (setupPhase === 'responsibility') {
+    setupSelectedResp = item;
+    addMessage("user", item.name);
+    setupPhase = 'ledger';
+    addMessage("assistant", `Got it. Now type a ledger name for "${item.name}":`);
+    renderSetupAutocomplete("");
+  } else if (setupPhase === 'ledger') {
+    addMessage("user", item.name);
+    sessionContext = { role_id: setupSelectedResp.id, role_name: setupSelectedResp.name, ledger_id: item.id, ledger_name: item.name };
+    setupPhase = null;
+    setupSelectedResp = null;
+    updateSessionDisplay();
+    addMessage("assistant", `All set! Using ${sessionContext.role_name} / ${item.name}. You can now ask your questions.`);
+  }
+  messageInput.focus();
+}
+
+function updateSessionDisplay() {
+  if (sessionContext.ledger_id) {
+    sessionRespPill.textContent = sessionContext.role_name || "Role selected";
+    sessionLedgerPill.textContent = sessionContext.ledger_name || "Ledger selected";
+    sessionContextDisplay.hidden = false;
+    setupBtn.classList.add("setup-btn-active");
+  } else {
+    sessionContextDisplay.hidden = true;
+    setupBtn.classList.remove("setup-btn-active");
+  }
+  if (sessionContext.hierarchy_id && sessionHierarchyPill) {
+    sessionHierarchyPill.textContent = sessionContext.hierarchy_name || `Hierarchy ${sessionContext.hierarchy_id}`;
+    sessionHierarchyPill.hidden = false;
+  } else if (sessionHierarchyPill) {
+    sessionHierarchyPill.hidden = true;
+  }
+}
+
+setupBtn.addEventListener("click", startSetupFlow);
 
 // ── Auto-grow textarea ──
 messageInput.addEventListener("input", () => {
   messageInput.style.height = "auto";
   messageInput.style.height = Math.min(messageInput.scrollHeight, 160) + "px";
-  if (pendingHierarchySelection) renderHierarchyAutocomplete(messageInput.value);
+  if (setupPhase) {
+    renderSetupAutocomplete(messageInput.value);
+  } else if (pendingHierarchySelection) {
+    renderHierarchyAutocomplete(messageInput.value);
+  }
 });
 
 // ── Send on Enter (Shift+Enter for newline) ──
@@ -183,6 +289,13 @@ function setLoading(on) {
 async function sendMessage(prompt, hierarchyId = null) {
   if (isLoading) return;
 
+  // Allow user to reset hierarchy by saying "change hierarchy" etc.
+  const changeHierarchyRequest = /change\s+(account\s+)?hierarchy|switch\s+(account\s+)?hierarchy|reset\s+hierarchy/i.test(prompt);
+  if (changeHierarchyRequest) {
+    sessionContext.hierarchy_id = null;
+    sessionContext.hierarchy_name = null;
+  }
+
   const selectedHierarchy = !hierarchyId ? resolveHierarchySelection(prompt) : null;
   const effectiveHierarchyId = hierarchyId ?? selectedHierarchy?.id ?? null;
   const effectivePrompt = effectiveHierarchyId && pendingHierarchySelection
@@ -206,6 +319,11 @@ async function sendMessage(prompt, hierarchyId = null) {
         message: effectivePrompt,
         history,
         hierarchy_id: effectiveHierarchyId,
+        session_hierarchy_id: sessionContext.hierarchy_id,
+        session_ledger_id: sessionContext.ledger_id,
+        session_ledger_name: sessionContext.ledger_name,
+        session_role_id: sessionContext.role_id,
+        session_role_name: sessionContext.role_name,
       }),
     });
     const payload = await res.json();
@@ -220,6 +338,14 @@ async function sendMessage(prompt, hierarchyId = null) {
       renderHierarchyAutocomplete("");
       addHierarchyButtons(payload.options, effectivePrompt);
     } else {
+      // If a hierarchy was just selected, persist it in session context
+      if (effectiveHierarchyId && !sessionContext.hierarchy_id) {
+        const selected = pendingHierarchySelection?.options?.find(o => o.id === effectiveHierarchyId)
+          || (selectedHierarchy) || { id: effectiveHierarchyId, name: `Hierarchy ${effectiveHierarchyId}` };
+        sessionContext.hierarchy_id = effectiveHierarchyId;
+        sessionContext.hierarchy_name = selected.name || `Hierarchy ${effectiveHierarchyId}`;
+        updateSessionDisplay();
+      }
       pendingHierarchySelection = null;
       clearHierarchyAutocomplete();
       history.push({ role: "assistant", content: payload.reply });
@@ -237,7 +363,14 @@ async function sendMessage(prompt, hierarchyId = null) {
 form.addEventListener("submit", async (e) => {
   e.preventDefault();
   const prompt = messageInput.value.trim();
-  if (prompt) await sendMessage(prompt);
+  if (!prompt) return;
+  if (setupPhase) {
+    const matches = getSetupMatches(prompt);
+    if (matches.length > 0) selectSetupItem(matches[0]);
+    messageInput.value = "";
+    return;
+  }
+  await sendMessage(prompt);
 });
 
 loadHealth();

@@ -1,0 +1,21 @@
+GL Assistant - Question Coverage Report
+Generated: 2026-03-26 10:48:08
+======================================================================
+TOTAL
+: 77
+PASS
+ANSWERED : 75 (97%)
+WARN
+ZERO BAL : 0
+WARN
+NO DB
+: 0
+WARN
+UNSUPPRTD: 0
+FAIL
+ERRORS
+: 2
+======================================================================
+
+DETAIL (classification | api_path | question)
+----------------------------------------------------------------------

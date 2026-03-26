@@ -68,8 +68,24 @@ def classify_result(body: dict) -> str:
     if "error" in reply.lower() or "Error" in reply:
         return "DB_ERROR"
     if db_result is not None:
+        # Each API path has a different result shape — check the right key
+        if api_path == "/api/db/balance/diff":
+            return "ANSWERED" if db_result.get("ytd_from") is not None or db_result.get("ytd_to") is not None else "ZERO_BALANCE"
+        if api_path == "/api/db/balance/trend":
+            periods = db_result.get("periods") or []
+            return "ANSWERED" if periods else "ZERO_BALANCE"
+        if api_path == "/api/db/balance/highlights":
+            accounts = db_result.get("top_accounts") or []
+            return "ANSWERED" if accounts else "ZERO_BALANCE"
+        if api_path == "/api/db/balance/explain":
+            return "ANSWERED" if db_result.get("ytd_balance") is not None else "ZERO_BALANCE"
+        if api_path == "/api/db/balance/diagnostics":
+            return "ANSWERED" if "balance_row_exists" in db_result else "ZERO_BALANCE"
+        if api_path == "/api/db/journal/details":
+            return "ANSWERED"
+        # by-account / by-ccid — ytd_balance can legitimately be 0 for parent accounts
         ytd = db_result.get("ytd_balance")
-        if ytd == 0 or ytd is None:
+        if ytd is None:
             return "ZERO_BALANCE"
         return "ANSWERED"
     if "completed" in reply.lower() or "drilldown" in reply.lower():

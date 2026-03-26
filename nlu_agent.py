@@ -43,16 +43,19 @@ Allowed routes:
 
 Routing Rules:
 - If the question is about balances for a CCID, route to by-ccid.
-- If the question is about balances for an account number, route to by-account.
+- If the question is about balances for an account number, route to by-account. This includes short or terse queries like "balance for 11200 in 01-23", "what is 16160 in 12-24", "11200 balance 01-23" — these are always by-account, never diagnostics.
 - If the question asks to compare two periods, use diff.
 - If it asks for history or last N periods, use trend.
 - If it asks to explain a calculation, use explain.
-- If it asks why a result is null/zero or whether a CCID exists, use diagnostics.
+- ONLY use diagnostics when the user explicitly asks WHY a balance is null or zero, or asks to CHECK/VERIFY whether an account or CCID exists in the system (e.g. "why is 11200 zero?", "does account X exist?", "check if CCID Y has data"). Never use diagnostics for a plain balance request.
 - If it asks for high-level GL balance highlights or highest activity, use highlights. Include "sort_by": "activity" in params if activity is requested.
 - If it is an API usage question, use /api/db/none.
 - If it asks about journals, use /api/db/journal/details.
 - Extract only params that are present or safely inferable.
 - Default actual_flag to A when omitted.
+- If the user asks for "entered" values/amounts/currency, add "entered_flag": "E" to params.
+- If the user asks for "accounted" values/amounts or "functional currency", add "entered_flag": "B" to params.
+- Do not include entered_flag if not mentioned (the system defaults to accounted).
 """
 
 BALANCE_KEYWORDS = ("balance", "ccid", "account", "ledger", "period", "ytd", "activity")
@@ -149,6 +152,8 @@ def complete_lookup_params(question: str, params: dict[str, Any], history: list[
     completed.update(params)
     completed.setdefault("actual_flag", "A")
     completed.setdefault("ledger_id", core_services.DEFAULT_LEDGER_ID)
+    # entered_flag: "B" = accounted/functional (default), "E" = entered/transaction currency
+    # Do not set a default here — finance_agent defaults to "B" so absence means accounted
     if completed.get("account_number"):
         acct_str = str(completed["account_number"]).lower()
         if not re.fullmatch(r"[\d\.\-]+", acct_str):

@@ -29,12 +29,24 @@
         </div>
       </a>
 
-      <div class="header-status" id="status-strip">
-        <span class="status-pill">Checking...</span>
+      <div class="header-center" id="session-context-display" hidden>
+        <span class="session-pill" id="session-resp-pill"></span>
+        <span class="session-pill session-pill-ledger" id="session-ledger-pill"></span>
+        <span class="session-pill session-pill-hierarchy" id="session-hierarchy-pill" hidden></span>
+      </div>
+
+      <div class="header-right">
+        <button class="setup-btn" id="setup-btn" title="Select responsibility and ledger">
+          Select Ledger
+        </button>
+        <div class="header-status" id="status-strip">
+          <span class="status-pill">Checking...</span>
+        </div>
       </div>
     </header>
 
-    <!-- ── Chat ── -->
+
+<!-- ── Chat ── -->
     <div class="chat-body">
       <div class="chat-log" id="chat-log">
         <div class="message assistant">
@@ -79,6 +91,7 @@
       </div>
     </template>
 
+    <script>window.LEDGER_DATA = {{ ledger_data_json | safe }};</script>
     <script src="{{ url_for('static', filename='app.js') }}"></script>
   </body>
 </html>

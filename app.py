@@ -10,9 +10,25 @@ import rag_engine
 from core_services import AmbiguousHierarchyError
 app = Flask(__name__)
 
+@app.after_request
+def no_cache_static(response):
+    if request.path.startswith("/static/"):
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+    return response
+
 @app.get("/")
 def index():
-    return render_template("index.html", model=core_services.GEMINI_MODEL)
+    import json as _json
+    try:
+        ledger_result = core_services.call_get_ledgers()
+        ledger_data_json = _json.dumps(ledger_result)
+        print(f"[INDEX] Loaded {len(ledger_result.get('responsibilities', []))} responsibilities for page")
+    except Exception as exc:
+        print(f"[INDEX] Failed to load ledgers: {exc}")
+        ledger_data_json = '{"responsibilities":[]}'
+    return render_template("index.html", model=core_services.GEMINI_MODEL, ledger_data_json=ledger_data_json)
 
 @app.get("/api/health")
 def health():
@@ -73,6 +89,16 @@ def chat():
     path = routed["api_path"]; pms = routed.get("params") or {}
     if "hierarchy_id" in payload:
         pms["hierarchy_id"] = payload["hierarchy_id"]
+    elif payload.get("session_hierarchy_id") and "hierarchy_id" not in pms:
+        pms["hierarchy_id"] = int(payload["session_hierarchy_id"])
+    if payload.get("session_ledger_id") and "ledger_id" not in pms:
+        pms["ledger_id"] = int(payload["session_ledger_id"])
+    if payload.get("session_ledger_name") and "ledger_name" not in pms:
+        pms["ledger_name"] = payload["session_ledger_name"]
+    if payload.get("session_role_id") and "role_id" not in pms:
+        pms["role_id"] = payload["session_role_id"]
+    if payload.get("session_role_name") and "role_name" not in pms:
+        pms["role_name"] = payload["session_role_name"]
     if path == "/api/db/none":
         res = finance_agent.dispatch_db_api(path, pms)
         reply = finance_agent.generate_rag_reply(message, path, res)
@@ -115,6 +141,20 @@ def chat():
         print(f"[API] DB API ({path}) failed: {exc}")
         return jsonify({"error": f"Database API failed: {exc}", "routing": routed}), 500
     return jsonify({"reply": r, "routing": routed, "db_result": res, "timings": timings})
+
+@app.get("/api/setup/ledgers")
+def api_setup_ledgers():
+    print("[SETUP] GET /api/setup/ledgers called")
+    try:
+        result = core_services.call_get_ledgers()
+        count = len(result.get("responsibilities", []))
+        print(f"[SETUP] Returning {count} responsibilities")
+        return jsonify(result)
+    except Exception as exc:
+        import traceback
+        print(f"[SETUP] ERROR: {exc}\n{traceback.format_exc()}")
+        return jsonify({"error": str(exc)}), 500
+
 
 # Wrapper endpoints for direct DB API access
 @app.post("/api/db/balance/by-ccid")
@@ -219,4 +259,5 @@ if __name__ == "__main__":
         host=os.getenv("FLASK_HOST", "127.0.0.1"),
         port=int(os.getenv("FLASK_PORT", "5000")),
         debug=os.getenv("FLASK_DEBUG", "").lower() in {"1", "true", "yes"},
+        threaded=True,
     )

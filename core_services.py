@@ -24,8 +24,8 @@ load_dotenv()
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
-DEFAULT_LEDGER_NAME = os.getenv("DEFAULT_LEDGER_NAME", "")
-DEFAULT_LEDGER_ID = int(os.getenv("DEFAULT_LEDGER_ID", "0"))
+DEFAULT_LEDGER_NAME = os.getenv("DEFAULT_LEDGER_NAME", "US Primary Ledger")
+DEFAULT_LEDGER_ID = int(os.getenv("DEFAULT_LEDGER_ID", "300000046975971"))
 DEFAULT_CURRENCY_SYMBOL = os.getenv("DEFAULT_CURRENCY_SYMBOL", "$")
 
 GLC_SOURCE_ID = int(os.getenv("GLC_SOURCE_ID", "0"))
@@ -75,10 +75,21 @@ DB_POOL = oracledb.create_pool(
 def get_db_connection():
     return DB_POOL.acquire()
 
-def get_hierarchy_table_for_account(coa_id: int | None = None, hierarchy_id: int | None = None) -> str:
+def get_coa_for_ledger(ledger_id: int) -> int | None:
+    row = query_one(
+        "SELECT chart_of_accounts_id FROM gl_ledgers WHERE ledger_id = :ledger_id",
+        {"ledger_id": ledger_id}
+    )
+    return int(row[0]) if row else None
+
+def get_hierarchy_table_for_account(coa_id: int | None = None, hierarchy_id: int | None = None, ledger_id: int | None = None) -> str:
     # If the caller already resolved a hierarchy (from user selection), use it directly.
     if hierarchy_id:
-        return f"GLC_HIER_{hierarchy_id}"
+        return f"GLC_HIER_VALUES_{hierarchy_id}"
+
+    # Prefer dynamically looked-up COA for the selected ledger
+    if coa_id is None and ledger_id:
+        coa_id = get_coa_for_ledger(ledger_id)
 
     effective_coa_id = coa_id if coa_id is not None else GLC_COA_ID
 
@@ -101,7 +112,7 @@ def get_hierarchy_table_for_account(coa_id: int | None = None, hierarchy_id: int
             f"No hierarchies found for field group {fg_id}.", []
         )
     if len(h_rows) == 1:
-        return f"GLC_HIER_{h_rows[0][0]}"
+        return f"GLC_HIER_VALUES_{h_rows[0][0]}"
 
     # Multiple hierarchies — always prompt the user to choose.
     options = [{"id": r[0], "name": r[1]} for r in h_rows]
@@ -211,7 +222,7 @@ def extract_filters(message: str) -> dict[str, Any]:
         "ledger_id": r"ledger(?:\s+id)?\s*(?:=|:)?\s*(\d+)",
         "period_name": r"\b([A-Z]{3}-\d{2}|\d{2}-\d{2})\b",
         "ccid": r"(?:ccid|code combination(?:\s+id)?)\s*(?:=|:)?\s*(\d+)",
-        "account_number": r"(?:account(?:\s+number)?|acct)\s*(?:=|:)?\s*([A-Za-z0-9_-]+)",
+        "account_number": r"(?:account(?:\s+number)?|acct)(?!\w)\s*(?:=|:)?\s*([A-Za-z0-9_-]+)",
         "actual_flag": r"actual\s+flag\s*(?:=|:)?\s*([ABE])\b",
         "period_from": r"(?:between|from)\s+([A-Z]{3}-\d{2}|\d{2}-\d{2})\s+(?:and|to|vs\.?|versus)\s+([A-Z]{3}-\d{2}|\d{2}-\d{2})",
         "last_n": r"last\s+(\d+)\s+(?:periods|months)",
@@ -266,7 +277,7 @@ def extract_filters(message: str) -> dict[str, Any]:
 
     if "account_number" not in results and "ccid" not in results:
         lower_message = message.lower()
-        if any(token in lower_message for token in ("balance", "account", "period", "ytd", "activity", "actuals", "budget", "encumbrance", "trend", "journal", "change", "changed", "compare", "break", "breakdown", "debit", "credit")):
+        if any(token in lower_message for token in ("balance", "account", "period", "ytd", "activity", "actuals", "budget", "encumbrance", "trend", "journal", "change", "changed", "compare", "break", "breakdown", "debit", "credit", "entered", "accounted", "amount", "functional")):
             bare_number_match = re.search(r"(?<!\d)(\d{4,6})(?!\d)", message)
             if bare_number_match:
                 results["account_number"] = bare_number_match.group(1)
@@ -276,6 +287,12 @@ def extract_filters(message: str) -> dict[str, Any]:
         if re.search(r"\bactuals?\b", lower_message): results["actual_flag"] = "A"
         elif re.search(r"\bbudget\b", lower_message): results["actual_flag"] = "B"
         elif re.search(r"\bencumbrance\b", lower_message): results["actual_flag"] = "E"
+
+    if "entered_flag" not in results:
+        if re.search(r"\bentered\b", lower_message):
+            results["entered_flag"] = "E"
+        elif re.search(r"\b(accounted|functional currency|base currency)\b", lower_message):
+            results["entered_flag"] = "A"
 
     if "period_name" not in results and "period_from" not in results:
         try:
@@ -339,10 +356,17 @@ def call_glc_balance(
     account_string: str | None,
     period_type: str = "YTD",
     currency_code: str = "USD",
-    hierarchy_id: int | None = None
+    hierarchy_id: int | None = None,
+    role_id: str | int | None = None,
+    role_name: str | None = None,
+    ledger_id: int | None = None,
+    entered_flag: str = "A",
 ) -> tuple[float | None, str | None]:
     session_id = str(random.randint(1000000, 9999999))
-    hierarchy_table = get_hierarchy_table_for_account(hierarchy_id=hierarchy_id)
+    effective_coa_id = (get_coa_for_ledger(ledger_id) if ledger_id else None) or GLC_COA_ID
+    hierarchy_table = get_hierarchy_table_for_account(coa_id=effective_coa_id, hierarchy_id=hierarchy_id)
+    effective_role_id = int(role_id) if role_id is not None else GLC_ROLE_ID
+    effective_role_name = role_name if role_name is not None else GLC_ROLE
     sql = """
     DECLARE
         l_fields glc_utility.varchar2_tab;
@@ -376,7 +400,7 @@ def call_glc_balance(
             p_get_bal_frm => 'R',
             p_trailing_months => 0,
             p_debit_credit_flag => NULL,
-            p_entered_flag => 'B',
+            p_entered_flag => :entered_flag,
             p_period_offset => NULL,
             p_encumbrance_name => NULL,
             p_budget_name => NULL,
@@ -396,7 +420,9 @@ def call_glc_balance(
         :out_msg := 'GLC_BALANCES_PKG Error: ' || SQLERRM;
     END;
     """
+    GLC_CALL_TIMEOUT_MS = int(os.getenv("GLC_CALL_TIMEOUT_MS", "30000"))
     with get_db_connection() as conn:
+        conn.call_timeout = GLC_CALL_TIMEOUT_MS
         with conn.cursor() as cursor:
             out_bal = cursor.var(oracledb.DB_TYPE_NUMBER)
             out_msg = cursor.var(str)
@@ -407,15 +433,16 @@ def call_glc_balance(
                     "session_id": session_id,
                     "glc_source_id": GLC_SOURCE_ID,
                     "glc_user_id": GLC_USER_ID,
-                    "glc_role": GLC_ROLE,
-                    "glc_role_id": GLC_ROLE_ID,
-                    "glc_coa_id": GLC_COA_ID,
+                    "glc_role": effective_role_name,
+                    "glc_role_id": effective_role_id,
+                    "glc_coa_id": effective_coa_id,
                     "ledger_name": ledger_name,
                     "default_ledger_name": DEFAULT_LEDGER_NAME,
                     "period_name": period_name,
                     "actual_flag": actual_flag,
                     "currency_code": currency_code,
                     "period_type": period_type,
+                    "entered_flag": entered_flag,
                     "account_string": account_string,
                     "hierarchy_table": hierarchy_table,
                     "out_bal": out_bal,
@@ -427,8 +454,63 @@ def call_glc_balance(
                 if val is not None:
                     return float(val), out_msg.getvalue()
                 return None, out_msg.getvalue()
+            except oracledb.OperationalError as e:
+                if "DPY-4011" in str(e) or "call timeout" in str(e).lower():
+                    timeout_s = GLC_CALL_TIMEOUT_MS // 1000
+                    print(f"[GLC] PL/SQL get_balance timed out after {timeout_s}s for account {account_string} — likely a large summary/parent account.")
+                    return None, f"Balance query timed out after {timeout_s}s. Account {account_string} may be a parent/summary account with too many child accounts to roll up quickly."
+                return None, "Error executing GLC balances: " + str(e)
             except Exception as e:
                 return None, "Error executing GLC balances: " + str(e)
+
+def call_get_ledgers() -> dict:
+    """Call GET_LEDGERS stored procedure and return parsed responsibilities and ledgers."""
+    import json as _json
+    session_id = str(random.randint(1000000, 9999999))
+    sql = """
+    DECLARE
+        P_XML_OUT CLOB;
+    BEGIN
+        GET_LEDGERS(
+            P_SOURCE_ID  => :source_id,
+            P_USER_ID    => :user_id,
+            P_SESSION_ID => :session_id,
+            P_XML_OUT    => P_XML_OUT
+        );
+        :json_out := P_XML_OUT;
+    END;
+    """
+    with get_db_connection() as conn:
+        with conn.cursor() as cursor:
+            json_out = cursor.var(oracledb.DB_TYPE_CLOB)
+            cursor.execute(sql, {
+                "source_id":  GLC_SOURCE_ID,
+                "user_id":    GLC_USER_ID,
+                "session_id": session_id,
+                "json_out":   json_out,
+            })
+            raw = json_out.getvalue()
+            if raw is None:
+                return {"responsibilities": []}
+            json_str = raw.read() if hasattr(raw, "read") else str(raw)
+
+    try:
+        data = _json.loads(json_str)
+        responsibilities = [
+            {
+                "id":   str(item.get("Id", "")),
+                "name": item.get("Name", ""),
+                "ledgers": [
+                    {"id": str(l.get("Id", "")), "name": l.get("Name", "")}
+                    for l in item.get("Ledgers", [])
+                ],
+            }
+            for item in data
+        ]
+        return {"responsibilities": responsibilities}
+    except (_json.JSONDecodeError, TypeError) as exc:
+        return {"error": f"JSON parse error: {exc}", "raw": json_str[:500]}
+
 
 def call_glc_drill(
     ledger_name: str | None,
@@ -436,11 +518,17 @@ def call_glc_drill(
     actual_flag: str | None,
     account_string: str | None,
     drill_type: str = "journal",
-    hierarchy_id: int | None = None
+    hierarchy_id: int | None = None,
+    role_id: str | int | None = None,
+    role_name: str | None = None,
+    ledger_id: int | None = None,
 ) -> tuple[str | None, str | None]:
     process_id = random.randint(1000000, 9999999)
     session_id = str(process_id)
-    hierarchy_table = get_hierarchy_table_for_account(hierarchy_id=hierarchy_id)
+    effective_coa_id = (get_coa_for_ledger(ledger_id) if ledger_id else None) or GLC_COA_ID
+    hierarchy_table = get_hierarchy_table_for_account(coa_id=effective_coa_id, hierarchy_id=hierarchy_id)
+    effective_role_id = int(role_id) if role_id is not None else GLC_ROLE_ID
+    effective_role_name = role_name if role_name is not None else GLC_ROLE
     sql = """
     DECLARE
         l_fields glc_utility.varchar2_tab;
@@ -501,9 +589,9 @@ def call_glc_drill(
                     "session_id": session_id,
                     "glc_source_id": GLC_SOURCE_ID,
                     "glc_user_id": GLC_USER_ID,
-                    "glc_role": GLC_ROLE,
-                    "glc_role_id": GLC_ROLE_ID,
-                    "glc_coa_id": GLC_COA_ID,
+                    "glc_role": effective_role_name,
+                    "glc_role_id": effective_role_id,
+                    "glc_coa_id": effective_coa_id,
                     "ledger_name": ledger_name,
                     "default_ledger_name": DEFAULT_LEDGER_NAME,
                     "period_name": period_name,
