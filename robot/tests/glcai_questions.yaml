@@ -1,10 +1,87 @@
 version: '1.0'
 domain: GL Assistant
-notes: Natural-language question variants for GL (Balances first, Journals later).
-  Use as training & test seed.
+
+notes: |
+  Natural-language question variants for GL (Balances first, Journals later).
+  Use as training & test seed. Includes:
+  - Multi-period balance queries
+  - Entered vs Accounted amount variations
+  - High-level and exploratory questions
+  - Journal lookups and summaries
+
+# ---------------------------------------------------------------------------
+# ENTITY DEFINITIONS (recommended for clarity)
+# ---------------------------------------------------------------------------
+
+entities:
+  - period
+  - period_from
+  - period_to
+  - company
+  - department
+  - account
+  - actual_flag
+  - currency_code
+  - amount_type
+  - source
+  - category
+  - status
+  - n
+
+# ---------------------------------------------------------------------------
+# SYNONYMS (Optional but recommended for NLU accuracy)
+# ---------------------------------------------------------------------------
+
+synonyms:
+
+  entered:
+    - entered amount
+    - entered balance
+    - transaction currency amount
+    - input amount
+
+  accounted:
+    - accounted amount
+    - ledger amount
+    - ledger currency balance
+    - functional currency amount
+
+  actual:
+    - actuals
+    - actual balance
+
+  budget:
+    - budgeted
+    - budget balance
+
+  encumbrance:
+    - encumbered
+    - encumbrance balance
+
+  variance:
+    - var
+    - actual vs budget
+    - actuals vs budget
+    - budget vs actual
+
+  variance_percent:
+    - var%
+    - v%
+    - variance percentage
+    - budget variance %
+
+# ---------------------------------------------------------------------------
+# INTENTS
+# ---------------------------------------------------------------------------
+
 intents:
+
+# ===========================================================
+# 1. BALANCE LOOKUP
+# ===========================================================
+
 - name: balance.lookup.segments.period
-  description: Get balance using COA segments (company/department/account) or natural account.
+  description: Get balance using COA segments or account with period context.
   entities:
     - period
     - company
@@ -13,10 +90,10 @@ intents:
     - actual_flag
     - amount_type
   utterances:
+    # Original
     - What is the balance for Account 16160 in 03-23?
-    - Show period balance for 16160, 03-23.
-    - Give me the balance of 16160 this period (03-23).
-    - Balance for 16160 in 03-23 on US Primary Ledger.
+    - What is the balance for account 10000 in 01-23?
+    - Balance for 20000 in 03-23.
     - Ending balance for Account 16160 in 02-23.
     - Fetch actual balance for US Primary Ledger, period 03-23, Account 16160.
     - Show balance for Company 942, Dept 90, Account 16160 in 02-23.
@@ -27,146 +104,299 @@ intents:
     - YTD on 16160, US Primary Ledger.
     - Show actual YTD for 16160.
 
-    # NEW — Entered vs Accounted amounts
-    - Show entered balance for 16160 in 03-23.
-    - Show accounted balance for 16160 in 03-23.
-    - What is the entered amount for account 16160 for this period?
-    - What is the accounted amount for account 16160 for this period?
-    - Get entered vs accounted amounts for 942-90-16160 in 03-23.
-    - Compare entered and accounted balances for account 16160 in 02-23.
-    - Show entered currency amount for 16160 in 03-23.
-    - Show accounted (ledger currency) amount for 16160 in 03-23.
-    - What is the accounted YTD for 16160?
-    - Give me entered YTD for 16160 for 03-23.
+    # NEW — Entered vs Accounted
+    - Show entered amount for 16160 in 03-23.
+    - Show accounted amount for 16160 in 03-23.
+    - Entered vs accounted amounts for 942-90-16160 in 03-23.
+    - Show entered currency amount for 16160 this period.
+    - Show accounted (ledger currency) amount for 16160 this period.
+    - Give me entered YTD for 16160.
+    - Give me accounted YTD for 16160.
+
+    # NEW — Multi-period
+    - Show balances for 16160 for periods 01-23, 02-23, and 03-23.
+    - Multi-period breakdown for 942-90-16160 for Jan through Mar 2023.
+    - Provide balances for 16160 from 01-23 to 04-23.
+    - Show entered and accounted amounts for 16160 across 01-23 to 04-23.
+    - Give me monthly balances for 16160 for Q1.
+    - Show period-wise YTD balances for 16160 up to 03-23.
+
+# ===========================================================
+# 2. BALANCE DIFFERENCES ACROSS TWO OR MORE PERIODS
+# ===========================================================
+
 - name: balance.diff.two_periods
-  description: Compare balances (difference) across two periods for an account or segments.
+  description: Compare balances across two or more periods.
   entities:
-  - period_from
-  - period_to
-  - account
-  - company
-  - department
-  - actual_flag
+    - period_from
+    - period_to
+    - account
+    - company
+    - department
+    - actual_flag
+    - amount_type
   utterances:
-  - Compare 12-23 vs 12-24 for Account 16160.
-  - What changed between 12-23 and 12-24 on 16160?
-  - How did account 16160 change from 12-23 to 12-24?
-  - Show year-on-year change for Account 16160 from 12-23 to 12-24.
-  - Difference in balance for 16160 between 12-23 and 12-24 on US Primary Ledger.
-  - Compare 12-23 to 12-24 for 942-90-16160.
+    # Original
+    - Compare 01-23 vs 02-23 for Account 16160.
+    - What changed between 01-23 and 02-23 on 16160?
+    - Δ for 942-90-16160 between 02-23 and 03-23.
+    - Show month-on-month change for Account 16160 (01-23 to 02-23).
+
+    # NEW — Multi-period
+    - Compare 01-23, 02-23, and 03-23 for 16160.
+    - Show changes from 01-23 to 04-23 for account 16160.
+    - Multi-period deltas for 942-90-16160 for Q1.
+    - Month-to-month difference for 16160 from Jan to Apr.
+
+    # NEW — Entered vs Accounted
+    - Compare entered amounts for 16160 from 01-23 to 03-23.
+    - Compare accounted amounts for 16160 across multiple periods.
+    - Show deltas for entered and accounted values for 942-90-16160.
+
+# ===========================================================
+# 3. BALANCE TREND (N PERIODS)
+# ===========================================================
+
 - name: balance.trend.last_n
-  description: Return last N periods balances for an account (trend).
+  description: Return last N periods trend for an account.
   entities:
-  - period
-  - account
-  - n
-  - actual_flag
+    - period
+    - account
+    - n
+    - actual_flag
+    - amount_type
   utterances:
-  - Show last 5 periods for Account 16160.
-  - Trend for last 6 periods on account 16160.
-  - Give me the 4-period history for 16160.
-  - How has 16160 trended recently?
-  - Show me the balance trend for account 15110 over the last 4 periods.
-  - What does the trend look like for 16160 as of 12-24?
-  - Last 3 periods for account 16160 ending 12-24.
+    # Original
+    - Show last 5 periods for Account 16160.
+    - Trend for last 6 months on account 16160.
+    - Give me the 4-period history for 16160.
+    - How has 16160 trended recently?
+
+    # NEW
+    - Show the last 12 periods trend for 16160.
+    - Show entered amount trend for the last 4 months.
+    - Show accounted amount trend for the last 6 periods.
+    - Rolling 3-month movement for 942-90-16160.
+
+# ===========================================================
+# 4. BALANCE TYPE OVERRIDE (Actual / Budget / Encumbrance)
+# ===========================================================
+
 - name: balance.type.override
-  description: Specify Actual/Budget/Encumbrance balances.
+  description: Specify Actual/Budget/Encumbrance results.
   entities:
-  - period
-  - account
-  - company
-  - department
-  - actual_flag
+    - period
+    - account
+    - company
+    - department
+    - actual_flag
+    - amount_type
   utterances:
-  - Budget balance for 942-90-16160 in 12-24.
-  - Encumbrance amount for Account 16160 in 12-24.
-  - Actuals for 16160 in 12-23.
-  - Show budget YTD for 942.90.16160 in 12-24.
-  - What is the actual balance for 16160 in 12-24?
-  - Show me the actual flag A balance for account 16160, period 12-24.
+    # Original
+    - Budget balance for 942-90-16160 in 03-23.
+    - Encumbrance amount for Account 16160 this period.
+    - Actuals for 16160 in 02-23.
+    - Show budget YTD for 942.90.16160.
+
+    # NEW — Multi-period
+    - Show budget balances for 942-90-16160 for 01-23 through 03-23.
+    - Give me encumbrance values for 16160 across Q1.
+    - Provide actuals for 16160 for Feb to May.
+
+    # NEW — Entered vs Accounted
+    - Show entered actuals for 16160 in 03-23.
+    - Show accounted actuals for 16160 in 03-23.
+    - Budget entered vs accounted for 942-90-16160 in 03-23.
+
+# ===========================================================
+# 5. CURRENCY OVERRIDE
+# ===========================================================
+
 - name: balance.currency.override
-  description: Ask results in a specific currency (if supported by backend).
+  description: Ask for results in a specific currency.
   entities:
-  - period
-  - account
-  - currency_code
-  - actual_flag
+    - period
+    - account
+    - currency_code
+    - actual_flag
+    - amount_type
   utterances:
-  - Show balance for 16160 in USD for 12-24.
-  - Convert Account 16160 to ledger currency in 12-23.
-  - Give foreign currency balance for 16160 (EUR) in 12-24.
-  - What is the USD balance for account 15110 in 12-24?
+    # Original
+    - Show balance for 16160 in USD for 03-23.
+    - Convert Account 16160 to ledger currency in 02-23.
+    - Give foreign currency balance for 16160 (EUR).
+
+    # NEW — Multi-period
+    - Convert 16160 balances to USD for 01-23 to 03-23.
+    - Show EUR balances for account 16160 across multiple periods.
+    - Compare USD vs ledger currency amounts for Q1.
+
+    # NEW — Entered vs Accounted
+    - Show entered currency amount for 16160 in 03-23.
+    - Show accounted ledger currency amount for 16160 in 03-23.
+
+# ===========================================================
+# 6. EXPLANATION OF CALCULATION
+# ===========================================================
+
 - name: balance.explain.calculation
-  description: Ask to explain how a balance was derived (begin + activity).
+  description: Explain balance components (begin + activity).
   entities:
-  - period
-  - account
-  - company
-  - department
+    - period
+    - account
+    - company
+    - department
+    - amount_type
   utterances:
-  - Explain how the balance for 16160 in 12-24 was calculated.
-  - Break down begin balance and period activity for 942-90-16160 in 12-24.
-  - Show debit/credit breakdown for Account 16160 in 12-24.
-  - What are the begin balance and period net amounts for account 16160 in 12-23?
-  - Walk me through the YTD calculation for 15110 in 12-24.
+    # Original
+    - Explain how the balance for 16160 in 03-23 was calculated.
+    - Break down begin balance and period activity for 942-90-16160.
+    - Show debit/credit breakdown for Account 16160 this period.
+
+    # NEW — Multi-period
+    - Explain how balances changed for 16160 across Q1.
+    - Multi-period activity explanation for 942-90-16160.
+
+    # NEW — Entered vs Accounted
+    - Explain the entered amount for 16160 in 03-23.
+    - Explain the accounted amount for 16160 in 03-23.
+
+# ===========================================================
+# 7. HIGH-LEVEL GL QUESTIONS
+# ===========================================================
+
 - name: balance.high_level
-  description: Exploratory / conversational high-level asks.
+  description: Conversational, exploratory GL analysis.
   entities:
-  - period
+    - period
+    - amount_type
   utterances:
-  - Show accounts with high balances in 12-24.
-  - Which accounts had the highest activity in 12-24?
-  - Top 5 accounts by balance in 12-24 on US Primary Ledger.
-  - What are the biggest balances in the GL for 12-24?
-  - Show me the top accounts for period 12-23.
-  - Which accounts changed the most in 12-24?
-  - What does the GL look like for period 12-24?
-  - Anything unusual in the balances for 12-24?
-- name: balance.lookup.ccid.period
-  description: Get balance directly using Code Combination ID (CCID) and period.
-  entities:
-  - ccid
-  - period
-  - actual_flag
-  utterances:
-  - What is the balance for CCID 300000047428567 in 12-24?
-  - Get YTD balance for code combination 300000047428567, period 12-24.
-  - CCID 300000047428567 balance for 12-24 on US Primary Ledger.
-  - Show the balance for code combination ID 300000047428567 in period 12-23.
-  - Balance lookup by CCID 300000047428567 for period 12-24.
-- name: balance.why_null_or_zero
-  description: Diagnose why a balance is null, zero, or missing — checks account and CCID existence and whether balance rows exist.
-  entities:
-  - account
-  - ccid
-  - period
-  utterances:
-  - Why is the balance for account 16160 null in 12-24?
-  - Does account 16160 exist with data in 12-24?
-  - Why is account 11200 showing zero balance?
-  - Check if CCID 300000047428567 has balance data in 12-24.
-  - Why is there no balance for account 11200 in period 01-23?
-  - Does account 15110 have data in the GL for period 12-24?
-  - Is account 16160 open and posting for US Primary Ledger?
+    # Original
+    - What does our GL look like this month?
+    - Show accounts with high balances in 03-23.
+    - Which accounts changed the most this period?
+    - Anything unusual in the GL this month?
+
+    # NEW — Multi-period
+    - What does our GL look like over the last 3 months?
+    - Show high-balance accounts across Q1.
+    - What changed the most in the GL over multiple periods?
+
+    # NEW — Entered vs Accounted
+    - Any major differences between entered and accounted values this month?
+
+# ===========================================================
+# 8. JOURNAL LOOKUP
+# ===========================================================
+
 - name: journals.lookup.basic
-  description: 'Phase 2: basic journal lookups for an account/period.'
+  description: Basic journal queries by account/period.
   entities:
-  - period
-  - account
-  - company
-  - department
-  - status
+    - period
+    - account
+    - company
+    - department
+    - status
   utterances:
-  - Show journals for Account 16160 in 12-24.
-  - Get all posted journals for 12-24 for 942-90-16160.
-  - What journals hit 16160 in 12-23?
+    # Original
+    - Show journals for Account 16160 in 02-23.
+    - Get all posted journals for 03-23 for 942-90-16160.
+    - What journals hit 16160 this period?
+
+    # NEW — Multi-period
+    - Show journals for 16160 for 01-23 to 03-23.
+    - Provide posted journals for 942-90-16160 across Q1.
+    - Show journal activity across multiple periods for 16160.
+
+# ===========================================================
+# 9. JOURNAL SUMMARY BY SOURCE
+# ===========================================================
+
 - name: journals.summary.by_source
-  description: 'Phase 2: journal totals by source/category.'
+  description: Journal totals by source/category.
   entities:
-  - period
-  - source
-  - category
+    - period
+    - source
+    - category
   utterances:
-  - Journal totals by source (Manual vs Payables) for 12-24.
-  - Show journal summary by category in 12-23.
-  - How much came from Payables in 12-24?
+    # Original
+    - Journal totals by source (Manual vs Payables) for 03-23.
+    - Show journal summary by category in 02-23.
+    - How much came from Payables this month?
+
+    # NEW — Multi-period
+    - Show journal totals for multiple periods 01-23 to 03-23.
+    - Category summaries across Q1.
+    - Payables vs Manual totals across several periods.
+
+# ===========================================================
+# 10. BUDGET BALANCE LOOKUP
+# ===========================================================
+
+- name: balance.budget.lookup
+  description: Retrieve budget balances for an account and period.
+  entities:
+    - period
+    - account
+    - company
+    - department
+    - actual_flag
+    - budget_name
+  utterances:
+    - What is the budget for Account 41000 in 03-23?
+    - Budget balance for 41000 in 01-23.
+    - Show budgeted amount for 41000 this period.
+    - Budget YTD for account 41000 in 03-23.
+    - What is the budget for 942-90-41000 in 02-23?
+    - Show budget balance for account 41000 for Jan 2023.
+    - Budget for account 41000 in Q1.
+    - Give me the budget balance for 41000 from 01-23 to 03-23.
+    - Budgeted amount for 41000 across multiple periods.
+
+# ===========================================================
+# 11. VARIANCE (ACTUAL vs BUDGET)
+# ===========================================================
+
+- name: balance.variance.lookup
+  description: Return variance (actual minus budget) for an account and period.
+  entities:
+    - period
+    - account
+    - company
+    - department
+    - actual_flag
+    - budget_name
+  utterances:
+    - What is the variance for Account 41000 in 03-23?
+    - Show variance for 41000 in 01-23.
+    - Variance for 942-90-41000 in 02-23.
+    - Actual vs budget variance for 41000 in 03-23.
+    - How does 41000 compare to budget in 03-23?
+    - What is the budget variance for account 41000 this period?
+    - Variance for account 41000 for Q1.
+    - Show variance for 41000 from 01-23 to 03-23.
+    - Multi-period variance for 41000 across Q1.
+
+# ===========================================================
+# 12. VARIANCE PERCENT (V%)
+# ===========================================================
+
+- name: balance.variance_percent.lookup
+  description: Return variance percentage (actual vs budget %) for an account and period.
+  entities:
+    - period
+    - account
+    - company
+    - department
+    - actual_flag
+    - budget_name
+  utterances:
+    - What is the variance % for Account 41000 in 03-23?
+    - Show V% for 41000 in 01-23.
+    - Variance percent for 41000 in 03-23.
+    - What percentage is 41000 off budget in 03-23?
+    - Budget variance percentage for account 41000 in 02-23.
+    - Show var% for 41000 this period.
+    - How far off budget is 41000 in 03-23 as a percentage?
+    - Variance percentage for 41000 for Q1.
+    - V% for 942-90-41000 in 03-23.

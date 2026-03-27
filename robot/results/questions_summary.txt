@@ -1,10 +1,10 @@
 GL Assistant - Question Coverage Report
-Generated: 2026-03-26 10:48:08
+Generated: 2026-03-26 17:01:29
 ======================================================================
 TOTAL
-: 77
+: 89
 PASS
-ANSWERED : 75 (97%)
+ANSWERED : 86 (96%)
 WARN
 ZERO BAL : 0
 WARN
@@ -14,8 +14,97 @@ WARN
 UNSUPPRTD: 0
 FAIL
 ERRORS
-: 2
+: 3
 ======================================================================
 
 DETAIL (classification | api_path | question)
 ----------------------------------------------------------------------
+[PASS] ANSWERED /api/db/balance/by-account [6756ms] What is the balance for Account 16160 in 03-23?
+[PASS] ANSWERED /api/db/balance/by-account [16706ms] What is the balance for account 10000 in 01-23?
+[PASS] ANSWERED /api/db/balance/by-account [4557ms] Balance for 20000 in 03-23.
+[PASS] ANSWERED /api/db/balance/by-account [2996ms] Ending balance for Account 16160 in 02-23.
+[PASS] ANSWERED /api/db/balance/by-account [3069ms] Fetch actual balance for US Primary Ledger, period 03-23, Account 16160.
+[PASS] ANSWERED /api/db/balance/by-account [3064ms] Show balance for Company 942, Dept 90, Account 16160 in 02-23.
+[PASS] ANSWERED /api/db/balance/by-account [3470ms] Get 942-90-16160 in 03-23.
+[PASS] ANSWERED /api/db/balance/by-account [2908ms] Balance for company 942 account 16160 this period.
+[PASS] ANSWERED /api/db/balance/by-account [3350ms] What is the YTD for Account 16160?
+[PASS] ANSWERED /api/db/balance/by-account [3209ms] Give me YTD balance for 16160 in 03-23.
+[PASS] ANSWERED /api/db/balance/by-account [2865ms] YTD on 16160, US Primary Ledger.
+[PASS] ANSWERED /api/db/balance/by-account [3315ms] Show actual YTD for 16160.
+[PASS] ANSWERED /api/db/balance/by-account [3873ms] Show entered amount for 16160 in 03-23.
+[PASS] ANSWERED /api/db/balance/by-account [3766ms] Show accounted amount for 16160 in 03-23.
+[PASS] ANSWERED /api/db/balance/by-account [3248ms] Entered vs accounted amounts for 942-90-16160 in 03-23.
+[PASS] ANSWERED /api/db/balance/by-account [2985ms] Show entered currency amount for 16160 this period.
+[PASS] ANSWERED /api/db/balance/by-account [3162ms] Show accounted (ledger currency) amount for 16160 this period.
+[PASS] ANSWERED /api/db/balance/by-account [3030ms] Give me entered YTD for 16160.
+[PASS] ANSWERED /api/db/balance/by-account [2943ms] Give me accounted YTD for 16160.
+[PASS] ANSWERED /api/db/balance/multi-period [4787ms] Show balances for 16160 for periods 01-23, 02-23, and 03-23.
+[PASS] ANSWERED /api/db/balance/explain [1204ms] Multi-period breakdown for 942-90-16160 for Jan through Mar 2023.
+[PASS] ANSWERED /api/db/balance/diff [4141ms] Provide balances for 16160 from 01-23 to 04-23.
+[PASS] ANSWERED /api/db/balance/by-account [3183ms] Show entered and accounted amounts for 16160 across 01-23 to 04-23.
+[PASS] ANSWERED /api/db/balance/multi-period [4839ms] Give me monthly balances for 16160 for Q1.
+[PASS] ANSWERED /api/db/balance/by-account [3343ms] Show period-wise YTD balances for 16160 up to 03-23.
+[PASS] ANSWERED /api/db/balance/diff [4170ms] Compare 01-23 vs 02-23 for Account 16160.
+[PASS] ANSWERED /api/db/balance/diff [3893ms] What changed between 01-23 and 02-23 on 16160?
+[PASS] ANSWERED /api/db/balance/diff [3986ms] Δ for 942-90-16160 between 02-23 and 03-23.
+[PASS] ANSWERED /api/db/balance/diff [3913ms] Show month-on-month change for Account 16160 (01-23 to 02-23).
+[PASS] ANSWERED /api/db/balance/diff [3695ms] Compare 01-23, 02-23, and 03-23 for 16160.
+[PASS] ANSWERED /api/db/balance/diff [3992ms] Show changes from 01-23 to 04-23 for account 16160.
+[PASS] ANSWERED /api/db/balance/diff [4089ms] Multi-period deltas for 942-90-16160 for Q1.
+[FAIL] ERROR /api/db/balance/diff [1127ms] Month-to-month difference for 16160 from Jan to Apr.
+[PASS] ANSWERED /api/db/balance/diff [3899ms] Compare entered amounts for 16160 from 01-23 to 03-23.
+[PASS] ANSWERED /api/db/balance/trend [1379ms] Compare accounted amounts for 16160 across multiple periods.
+[PASS] ANSWERED /api/db/balance/trend [1243ms] Show deltas for entered and accounted values for 942-90-16160.
+[PASS] ANSWERED /api/db/balance/trend [1283ms] Show last 5 periods for Account 16160.
+[PASS] ANSWERED /api/db/balance/trend [1085ms] Trend for last 6 months on account 16160.
+[PASS] ANSWERED /api/db/balance/trend [1197ms] Give me the 4-period history for 16160.
+[PASS] ANSWERED /api/db/balance/trend [1328ms] How has 16160 trended recently?
+[PASS] ANSWERED /api/db/balance/trend [1243ms] Show the last 12 periods trend for 16160.
+[PASS] ANSWERED /api/db/balance/highlights [1323ms] Show entered amount trend for the last 4 months.
+[PASS] ANSWERED /api/db/balance/highlights [1410ms] Show accounted amount trend for the last 6 periods.
+[PASS] ANSWERED /api/db/balance/trend [1217ms] Rolling 3-month movement for 942-90-16160.
+[PASS] ANSWERED /api/db/balance/by-account [4674ms] Budget balance for 942-90-16160 in 03-23.
+[PASS] ANSWERED /api/db/balance/by-account [16938ms] Encumbrance amount for Account 16160 this period.
+[PASS] ANSWERED /api/db/balance/by-account [3572ms] Actuals for 16160 in 02-23.
+[PASS] ANSWERED /api/db/balance/by-account [9177ms] Show budget YTD for 942.90.16160.
+[PASS] ANSWERED /api/db/balance/by-account [4687ms] Show budget balances for 942-90-16160 for 01-23 through 03-23.
+[PASS] ANSWERED /api/db/balance/multi-period [8011ms] Give me encumbrance values for 16160 across Q1.
+[PASS] ANSWERED /api/db/balance/by-account [2906ms] Provide actuals for 16160 for Feb to May.
+[PASS] ANSWERED /api/db/balance/by-account [3268ms] Show entered actuals for 16160 in 03-23.
+[PASS] ANSWERED /api/db/balance/by-account [2921ms] Show accounted actuals for 16160 in 03-23.
+[PASS] ANSWERED /api/db/balance/by-account [4721ms] Budget entered vs accounted for 942-90-16160 in 03-23.
+[PASS] ANSWERED /api/db/balance/by-account [3223ms] Show balance for 16160 in USD for 03-23.
+[PASS] ANSWERED /api/db/balance/by-account [3340ms] Convert Account 16160 to ledger currency in 02-23.
+[PASS] ANSWERED /api/db/balance/by-ccid [3873ms] Give foreign currency balance for 16160 (EUR).
+[PASS] ANSWERED /api/db/balance/by-account [9067ms] Convert 16160 balances to USD for 01-23 to 03-23.
+[PASS] ANSWERED /api/db/balance/by-ccid [2804ms] Show EUR balances for account 16160 across multiple periods.
+[FAIL] ERROR /api/db/balance/diff [1286ms] Compare USD vs ledger currency amounts for Q1.
+[PASS] ANSWERED /api/db/balance/by-account [3057ms] Show entered currency amount for 16160 in 03-23.
+[PASS] ANSWERED /api/db/balance/by-account [3024ms] Show accounted ledger currency amount for 16160 in 03-23.
+[PASS] ANSWERED /api/db/balance/explain [1176ms] Explain how the balance for 16160 in 03-23 was calculated.
+[PASS] ANSWERED /api/db/balance/explain [1188ms] Break down begin balance and period activity for 942-90-16160.
+[PASS] ANSWERED /api/db/balance/explain [1609ms] Show debit/credit breakdown for Account 16160 this period.
+[PASS] ANSWERED /api/db/balance/multi-period [3934ms] Explain how balances changed for 16160 across Q1.
+[PASS] ANSWERED /api/db/balance/explain [1345ms] Multi-period activity explanation for 942-90-16160.
+[PASS] ANSWERED /api/db/balance/explain [1474ms] Explain the entered amount for 16160 in 03-23.
+[PASS] ANSWERED /api/db/balance/explain [1102ms] Explain the accounted amount for 16160 in 03-23.
+[PASS] ANSWERED /api/db/balance/highlights [1171ms] What does our GL look like this month?
+[PASS] ANSWERED /api/db/balance/highlights [1639ms] Show accounts with high balances in 03-23.
+[PASS] ANSWERED /api/db/balance/highlights [1195ms] Which accounts changed the most this period?
+[PASS] ANSWERED /api/db/balance/highlights [1331ms] Anything unusual in the GL this month?
+[PASS] ANSWERED /api/db/balance/highlights [1218ms] What does our GL look like over the last 3 months?
+[PASS] ANSWERED /api/db/balance/highlights [9662ms] Show high-balance accounts across Q1.
+[PASS] ANSWERED /api/db/balance/highlights [1215ms] What changed the most in the GL over multiple periods?
+[PASS] ANSWERED /api/db/balance/highlights [1306ms] Any major differences between entered and accounted values this month?
+[PASS] ANSWERED /api/db/journal/details [2615ms] Show journals for Account 16160 in 02-23.
+[PASS] ANSWERED /api/db/journal/details [2640ms] Get all posted journals for 03-23 for 942-90-16160.
+[PASS] ANSWERED /api/db/journal/details [3274ms] What journals hit 16160 this period?
+[PASS] ANSWERED /api/db/journal/details [2840ms] Show journals for 16160 for 01-23 to 03-23.
+[PASS] ANSWERED /api/db/journal/details [2883ms] Provide posted journals for 942-90-16160 across Q1.
+[PASS] ANSWERED /api/db/journal/details [2849ms] Show journal activity across multiple periods for 16160.
+[PASS] ANSWERED /api/db/journal/details [2768ms] Journal totals by source (Manual vs Payables) for 03-23.
+[PASS] ANSWERED /api/db/journal/details [2706ms] Show journal summary by category in 02-23.
+[PASS] ANSWERED /api/db/journal/details [2656ms] How much came from Payables this month?
+[PASS] ANSWERED /api/db/journal/details [2746ms] Show journal totals for multiple periods 01-23 to 03-23.
+[FAIL] ERROR /api/db/balance/multi-period [1118ms] Category summaries across Q1.
+[PASS] ANSWERED /api/db/journal/details [2878ms] Payables vs Manual totals across several periods.

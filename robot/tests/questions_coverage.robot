@@ -119,6 +119,11 @@ Classify Result
         IF    '${path}' == '/api/db/journal/details'
             RETURN    ANSWERED
         END
+        IF    '${path}' == '/api/db/balance/multi-period'
+            ${ok}=    Evaluate    bool(($db or {}).get('periods'))
+            IF    ${ok}    RETURN    ANSWERED
+            RETURN    ZERO_BALANCE
+        END
         # by-account / by-ccid / explain — ytd_balance can be 0 for parent accounts; None means no data
         ${ytd}=    Evaluate    ($db or {}).get('ytd_balance')
         IF    $ytd is None    RETURN    ZERO_BALANCE
@@ -160,7 +165,8 @@ Write Summary Report
         ${path}=    Set Variable    ${r}[api_path]
         ${q}=       Set Variable    ${r}[question]
         ${ms}=      Set Variable    ${r}[elapsed_ms]
-        ${line}=    Evaluate    '{:<6} {:<15} {:<38} [{}ms] {}\n'.format('[PASS]' if $cls=='ANSWERED' else ('[WARN]' if $cls in ('ZERO_BALANCE','NO_DB','UNSUPPORTED') else '[FAIL]'), $cls, $path, $ms, $q)
+        ${icon}=    Evaluate    '[PASS]' if $cls=='ANSWERED' else ('[WARN]' if $cls in ('ZERO_BALANCE','NO_DB','UNSUPPORTED') else '[FAIL]')
+        ${line}=    Catenate    SEPARATOR=    ${icon}${SPACE}    ${cls}${SPACE}    ${path}${SPACE}    [${ms}ms]${SPACE}    ${q}    \n
         Append To File    ${REPORT_PATH}    ${line}    encoding=UTF-8
     END
     Log    Summary written → ${REPORT_PATH}    console=yes

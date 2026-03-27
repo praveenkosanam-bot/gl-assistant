@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 rag_engine.py
 

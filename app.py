@@ -1,3 +1,4 @@
+from __future__ import annotations
 import os
 import time
 from flask import Flask, jsonify, render_template, request
@@ -99,6 +100,8 @@ def chat():
         pms["role_id"] = payload["session_role_id"]
     if payload.get("session_role_name") and "role_name" not in pms:
         pms["role_name"] = payload["session_role_name"]
+    if payload.get("session_budget_name") and "budget_name" not in pms:
+        pms["budget_name"] = payload["session_budget_name"]
     if path == "/api/db/none":
         res = finance_agent.dispatch_db_api(path, pms)
         reply = finance_agent.generate_rag_reply(message, path, res)
@@ -166,6 +169,11 @@ def api_balance_by_ccid():
 def api_balance_by_account():
     pms = nlu_agent.complete_lookup_params("", request.get_json(silent=True) or {})
     return jsonify(finance_agent.db_balance_by_account(pms))
+
+@app.post("/api/db/balance/multi-period")
+def api_balance_multi_period():
+    pms = nlu_agent.complete_lookup_params("", request.get_json(silent=True) or {})
+    return jsonify(finance_agent.db_balance_multi_period(pms))
 
 @app.post("/api/db/balance/diff")
 def api_balance_diff():

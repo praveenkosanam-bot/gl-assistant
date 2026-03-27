@@ -1,3 +1,4 @@
+from __future__ import annotations
 import json
 import re
 import requests
@@ -33,6 +34,7 @@ You must output ONLY valid JSON using the following structure. Do NOT output any
 Allowed routes:
 - /api/db/balance/by-ccid
 - /api/db/balance/by-account
+- /api/db/balance/multi-period
 - /api/db/balance/diff
 - /api/db/balance/trend
 - /api/db/balance/explain
@@ -44,6 +46,7 @@ Allowed routes:
 Routing Rules:
 - If the question is about balances for a CCID, route to by-ccid.
 - If the question is about balances for an account number, route to by-account. This includes short or terse queries like "balance for 11200 in 01-23", "what is 16160 in 12-24", "11200 balance 01-23" — these are always by-account, never diagnostics.
+- If the question asks for balances across multiple specific periods (comma-separated list like "01-23, 02-23, 03-23") or a period range without comparison intent ("balances for 11200 from 01-23 to 06-23"), use multi-period. Include "period_list": ["01-23","02-23",...] for explicit lists, or "period_from"/"period_to" for ranges. Do NOT use multi-period when the user asks to compare or see the difference between two periods.
 - If the question asks to compare two periods, use diff.
 - If it asks for history or last N periods, use trend.
 - If it asks to explain a calculation, use explain.
@@ -53,6 +56,9 @@ Routing Rules:
 - If it asks about journals, use /api/db/journal/details.
 - Extract only params that are present or safely inferable.
 - Default actual_flag to A when omitted.
+- If the user asks for "budget" amounts, set actual_flag to "B" and include "budget_name": "Budget".
+- If the user asks for "variance" (actual vs budget), set actual_flag to "V" and include "budget_name": "Budget".
+- If the user asks for "variance percent" or "variance %" or "V%", set actual_flag to "V%" and include "budget_name": "Budget".
 - If the user asks for "entered" values/amounts/currency, add "entered_flag": "E" to params.
 - If the user asks for "accounted" values/amounts or "functional currency", add "entered_flag": "B" to params.
 - Do not include entered_flag if not mentioned (the system defaults to accounted).
@@ -62,6 +68,7 @@ BALANCE_KEYWORDS = ("balance", "ccid", "account", "ledger", "period", "ytd", "ac
 SUPPORTED_API_PATHS = {
     "/api/db/balance/by-ccid",
     "/api/db/balance/by-account",
+    "/api/db/balance/multi-period",
     "/api/db/balance/diff",
     "/api/db/balance/trend",
     "/api/db/balance/explain",
@@ -152,6 +159,8 @@ def complete_lookup_params(question: str, params: dict[str, Any], history: list[
     completed.update(params)
     completed.setdefault("actual_flag", "A")
     completed.setdefault("ledger_id", core_services.DEFAULT_LEDGER_ID)
+    if completed.get("actual_flag") in ("B", "V", "V%"):
+        completed.setdefault("budget_name", core_services.DEFAULT_BUDGET_NAME)
     # entered_flag: "B" = accounted/functional (default), "E" = entered/transaction currency
     # Do not set a default here — finance_agent defaults to "B" so absence means accounted
     if completed.get("account_number"):
@@ -164,6 +173,7 @@ def complete_lookup_params(question: str, params: dict[str, Any], history: list[
     if completed.get("period_name"): completed["period_name"] = core_services.normalize_period(completed["period_name"])
     if completed.get("period_from"): completed["period_from"] = core_services.normalize_period(completed["period_from"])
     if completed.get("period_to"): completed["period_to"] = core_services.normalize_period(completed["period_to"])
+    if completed.get("period_list"): completed["period_list"] = [core_services.normalize_period(p) for p in completed["period_list"]]
     if any(completed.get(k) is not None for k in ("ccid", "account_number")) and any(completed.get(k) is None for k in ("ledger_id", "period_name")):
         seed = core_services.seed_lookup(account_number=completed.get("account_number"), ccid=completed.get("ccid"), ledger_id=completed.get("ledger_id"), period_name=completed.get("period_name"), actual_flag=completed.get("actual_flag"))
         if not seed:
@@ -178,6 +188,7 @@ def validate_route_params(api_path: str, params: dict[str, Any]) -> str | None:
     req: dict[str, tuple[str, ...]] = {
         "/api/db/balance/by-ccid": ("ledger_id", "period_name", "ccid"),
         "/api/db/balance/by-account": ("ledger_id", "period_name", "account_number"),
+        "/api/db/balance/multi-period": ("ledger_id",),
         "/api/db/balance/diff": ("ledger_id", "period_from", "period_to"),
         "/api/db/balance/trend": ("ledger_id",),
         "/api/db/balance/explain": ("ledger_id", "period_name"),
@@ -202,13 +213,55 @@ def resolve_question_rule_based(question: str, history: list[dict[str, str]] | N
         return {"api_path": "/api/db/journal/details", "params": params}
     if "how do i call" in text or "/api/" in text or "javascript" in text:
         return {"api_path": "/api/db/none", "params": {}, "reason": "API usage question."}
-    if re.search(r"\b(compare|changed between|month.on.month|delta|what changed)\b", text) or "Δ" in question or "δ" in question:
+    _DIFF_RE = r"\b(compare|changed between|month.on.month|deltas?|what changed)\b"
+    _HIGHL_RE = r"\b(high balances?|changed the most|unusual|what does our gl|highest activity|highest|look like|anything unusual|show accounts)\b"
+    # "changed the most" / explicit highlights keywords (check before diff/multi-period)
+    if re.search(r"\bchanged the most\b", text):
+        api_path = "/api/db/balance/highlights"
+        params.setdefault("limit", 5)
+        params.setdefault("sort_by", "activity")
+    elif re.search(r"\b(high.?balances?|unusual|what does our gl|highest activity|look like|anything unusual|show accounts)\b", text):
+        api_path = "/api/db/balance/highlights"
+        params.setdefault("limit", 5)
+    elif re.search(_DIFF_RE, text) or "Δ" in question or "δ" in question:
         api_path = "/api/db/balance/diff"
-    elif re.search(r"\b(trend|trended|last \d|history|\d+[- ]period|recently)\b", text): api_path = "/api/db/balance/trend"
+    elif params.get("period_list") and len(params["period_list"]) >= 2:
+        api_path = "/api/db/balance/multi-period"
+    elif params.get("period_from") and params.get("period_to") and api_path not in ("/api/db/balance/diff",):
+        # period range without diff intent → multi-period
+        if not re.search(r"\b(compare|changed between|month.on.month|deltas?|what changed|vs\.?|versus)\b", text):
+            api_path = "/api/db/balance/multi-period"
+    elif re.search(r"\b(trend|trended|last \d|history|\d+[- ]period|recently)\b", text):
+        # trend needs an account — fall back to highlights when none given
+        if params.get("account_number") is None and params.get("ccid") is None:
+            api_path = "/api/db/balance/highlights"
+            params.setdefault("limit", 5)
+        else:
+            api_path = "/api/db/balance/trend"
     elif re.search(r"\b(explain|break.?down|breakdown|debit.?credit)\b", text): api_path = "/api/db/balance/explain"
     elif re.search(r"\b(why|zero|null|exist|open for this ledger)\b", text): api_path = "/api/db/balance/diagnostics"
-    elif re.search(r"\b(high balances?|changed the most|unusual|what does our gl|highest activity|highest|look like|anything unusual|show accounts)\b", text):
-        params.setdefault("limit", 5); api_path = "/api/db/balance/highlights"
+
+    # Diff without periods → fall back to trend (account present) or highlights
+    if api_path == "/api/db/balance/diff" and (params.get("period_from") is None or params.get("period_to") is None):
+        if params.get("account_number") or params.get("ccid"):
+            api_path = "/api/db/balance/trend"
+        else:
+            api_path = "/api/db/balance/highlights"
+            params.setdefault("limit", 5)
+
+    # Highlights needs period_name — derive from quarter/range if available, else seed
+    if api_path == "/api/db/balance/highlights" and params.get("period_name") is None:
+        if params.get("period_to"):
+            params["period_name"] = params["period_to"]
+        elif params.get("period_from"):
+            params["period_name"] = params["period_from"]
+        else:
+            try:
+                _seed = core_services.seed_lookup(ledger_id=params.get("ledger_id"))
+                if _seed and _seed.get("period_name"):
+                    params["period_name"] = _seed["period_name"]
+            except Exception:
+                pass
     if api_path == "/api/db/balance/by-account" and params.get("account_number") is None and params.get("ccid") is not None: api_path = "/api/db/balance/by-ccid"
     if api_path == "/api/db/balance/by-ccid" and params.get("ccid") is None and params.get("account_number") is not None: api_path = "/api/db/balance/by-account"
     if api_path == "/api/db/balance/highlights": params.setdefault("limit", 5)

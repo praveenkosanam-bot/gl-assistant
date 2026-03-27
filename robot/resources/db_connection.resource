@@ -4,8 +4,8 @@ Library    DatabaseLibrary
 *** Variables ***
 ${DB_MODULE}    oracledb
 ${DB_NAME}      splashgl001
-${DB_USER}      XXSBID_605
-${DB_PASSWORD}  XXSBID_605
+${DB_USER}      XXSBID_612
+${DB_PASSWORD}  XXSBID_612
 ${DB_HOST}      192.168.8.127
 ${DB_PORT}      1521
 

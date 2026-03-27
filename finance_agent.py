@@ -1,3 +1,4 @@
+from __future__ import annotations
 import json
 from typing import Any
 import requests
@@ -81,10 +82,12 @@ def db_balance_by_ccid(params: dict[str, Any]) -> dict[str, Any]:
 
     hid = params.get("hierarchy_id")
     entered_flag = params.get("entered_flag", "A")
+    budget_name = params.get("budget_name")
     role_id = params.get("role_id"); role_name = params.get("role_name"); lid = params["ledger_id"]
-    ytd, ytd_msg = core_services.call_glc_balance(ledger_name=ledger_name, period_name=period_name, actual_flag=params.get("actual_flag", "A"), account_string=account_str, period_type="YTD", hierarchy_id=hid, currency_code=currency_code, role_id=role_id, role_name=role_name, ledger_id=lid, entered_flag=entered_flag)
-    period_activity, activity_msg = core_services.call_glc_balance(ledger_name=ledger_name, period_name=period_name, actual_flag=params.get("actual_flag", "A"), account_string=account_str, period_type="PTD", hierarchy_id=hid, currency_code=currency_code, role_id=role_id, role_name=role_name, ledger_id=lid, entered_flag=entered_flag)
-    return {"lookup_type": "ccid", "ledger_id": params["ledger_id"], "ledger_name": ledger_name, "period_name": period_name, "ccid": params["ccid"], "account_number": account_str, "actual_flag": params.get("actual_flag", "A"), "entered_flag": entered_flag, "balance_type": "Entered" if entered_flag == "E" else "Accounted", "ytd_balance": ytd, "period_activity": period_activity, "status_msg": ytd_msg or activity_msg, "resolved_from_seed": params.get("resolved_from_seed", False), "hierarchy_id": hid}
+    actual_flag = params.get("actual_flag", "A")
+    ytd, ytd_msg = core_services.call_glc_balance(ledger_name=ledger_name, period_name=period_name, actual_flag=actual_flag, account_string=account_str, period_type="YTD", hierarchy_id=hid, currency_code=currency_code, role_id=role_id, role_name=role_name, ledger_id=lid, entered_flag=entered_flag, budget_name=budget_name)
+    period_activity, activity_msg = core_services.call_glc_balance(ledger_name=ledger_name, period_name=period_name, actual_flag=actual_flag, account_string=account_str, period_type="PTD", hierarchy_id=hid, currency_code=currency_code, role_id=role_id, role_name=role_name, ledger_id=lid, entered_flag=entered_flag, budget_name=budget_name)
+    return {"lookup_type": "ccid", "ledger_id": params["ledger_id"], "ledger_name": ledger_name, "period_name": period_name, "ccid": params["ccid"], "account_number": account_str, "actual_flag": actual_flag, "budget_name": budget_name, "entered_flag": entered_flag, "balance_type": "Entered" if entered_flag == "E" else "Accounted", "ytd_balance": ytd, "period_activity": period_activity, "status_msg": ytd_msg or activity_msg, "resolved_from_seed": params.get("resolved_from_seed", False), "hierarchy_id": hid}
 
 def db_balance_by_account(params: dict[str, Any]) -> dict[str, Any]:
     ledger_name = params.get("ledger_name") or get_ledger_name(params["ledger_id"])
@@ -100,11 +103,46 @@ def db_balance_by_account(params: dict[str, Any]) -> dict[str, Any]:
 
     hid = params.get("hierarchy_id")
     entered_flag = params.get("entered_flag", "A")
+    budget_name = params.get("budget_name")
     role_id = params.get("role_id"); role_name = params.get("role_name"); lid = params["ledger_id"]
-    ytd, ytd_msg = core_services.call_glc_balance(ledger_name=ledger_name, period_name=period_name, actual_flag=params.get("actual_flag", "A"), account_string=params["account_number"], period_type="YTD", hierarchy_id=hid, currency_code=currency_code, role_id=role_id, role_name=role_name, ledger_id=lid, entered_flag=entered_flag)
-    period_activity, activity_msg = core_services.call_glc_balance(ledger_name=ledger_name, period_name=period_name, actual_flag=params.get("actual_flag", "A"), account_string=params["account_number"], period_type="PTD", hierarchy_id=hid, currency_code=currency_code, role_id=role_id, role_name=role_name, ledger_id=lid, entered_flag=entered_flag)
-    seed = core_services.seed_lookup(account_number=params["account_number"], ledger_id=params["ledger_id"], period_name=period_name, actual_flag=params.get("actual_flag", "A"))
-    return {"lookup_type": "account_number", "ledger_id": params["ledger_id"], "ledger_name": ledger_name, "period_name": period_name, "account_number": params["account_number"], "ccid": seed["ccid"] if seed else None, "actual_flag": params.get("actual_flag", "A"), "entered_flag": entered_flag, "balance_type": "Entered" if entered_flag == "E" else "Accounted", "ytd_balance": float(ytd) if ytd is not None else None, "period_activity": float(period_activity) if period_activity is not None else None, "status_msg": ytd_msg or activity_msg, "resolved_from_seed": params.get("resolved_from_seed", False), "hierarchy_id": hid}
+    actual_flag = params.get("actual_flag", "A")
+    ytd, ytd_msg = core_services.call_glc_balance(ledger_name=ledger_name, period_name=period_name, actual_flag=actual_flag, account_string=params["account_number"], period_type="YTD", hierarchy_id=hid, currency_code=currency_code, role_id=role_id, role_name=role_name, ledger_id=lid, entered_flag=entered_flag, budget_name=budget_name)
+    period_activity, activity_msg = core_services.call_glc_balance(ledger_name=ledger_name, period_name=period_name, actual_flag=actual_flag, account_string=params["account_number"], period_type="PTD", hierarchy_id=hid, currency_code=currency_code, role_id=role_id, role_name=role_name, ledger_id=lid, entered_flag=entered_flag, budget_name=budget_name)
+    seed = core_services.seed_lookup(account_number=params["account_number"], ledger_id=params["ledger_id"], period_name=period_name, actual_flag="A")
+    return {"lookup_type": "account_number", "ledger_id": params["ledger_id"], "ledger_name": ledger_name, "period_name": period_name, "account_number": params["account_number"], "ccid": seed["ccid"] if seed else None, "actual_flag": actual_flag, "budget_name": budget_name, "entered_flag": entered_flag, "balance_type": "Entered" if entered_flag == "E" else "Accounted", "ytd_balance": float(ytd) if ytd is not None else None, "period_activity": float(period_activity) if period_activity is not None else None, "status_msg": ytd_msg or activity_msg, "resolved_from_seed": params.get("resolved_from_seed", False), "hierarchy_id": hid}
+
+def db_balance_multi_period(params: dict[str, Any]) -> dict[str, Any]:
+    """Return balances for a list of periods or an expanded period range."""
+    period_list: list[str] = params.get("period_list") or []
+    if not period_list and params.get("period_from") and params.get("period_to"):
+        period_list = core_services.expand_period_range(params["period_from"], params["period_to"])
+    if not period_list:
+        return {"error": "No periods supplied. Provide period_list or period_from/period_to."}
+
+    base = {k: v for k, v in params.items() if k not in ("period_list", "period_name", "period_from", "period_to")}
+    periods_result = []
+    for period in period_list:
+        if base.get("ccid") is not None:
+            r = db_balance_by_ccid({**base, "period_name": period})
+        else:
+            r = db_balance_by_account({**base, "period_name": period})
+        periods_result.append({
+            "period_name": period,
+            "ytd_balance": r.get("ytd_balance"),
+            "period_activity": r.get("period_activity"),
+            "status_msg": r.get("status_msg") or r.get("error"),
+        })
+
+    return {
+        "lookup_type": "multi_period",
+        "ledger_id": params.get("ledger_id"),
+        "account_number": params.get("account_number"),
+        "ccid": params.get("ccid"),
+        "actual_flag": params.get("actual_flag", "A"),
+        "periods": periods_result,
+        "resolved_from_seed": params.get("resolved_from_seed", False),
+    }
+
 
 def db_balance_explain(params: dict[str, Any]) -> dict[str, Any]:
     where_filter = ["gb.ledger_id = :ledger_id", "gb.period_name = :period_name", "gb.actual_flag = :actual_flag"]
@@ -182,6 +220,7 @@ def dispatch_db_api(api_path: str, params: dict[str, Any]) -> dict[str, Any]:
     route_map = {
         "/api/db/balance/by-ccid": db_balance_by_ccid,
         "/api/db/balance/by-account": db_balance_by_account,
+        "/api/db/balance/multi-period": db_balance_multi_period,
         "/api/db/balance/diff": db_balance_diff,
         "/api/db/balance/trend": db_balance_trend,
         "/api/db/balance/explain": db_balance_explain,
@@ -197,9 +236,19 @@ def format_chat_reply(api_path: str, result: dict[str, Any]) -> str:
     lbl = result.get("ledger_name") or (get_ledger_name(result.get("ledger_id")) if "ledger_id" in result else None)
     cur = core_services.format_currency
     if api_path in ("/api/db/balance/by-account", "/api/db/balance/by-ccid"):
-        bal_type = result.get("balance_type", "Accounted")  # 'A'=Accounted, 'E'=Entered
+        actual_flag = result.get("actual_flag", "A")
+        bal_type = result.get("balance_type", "Accounted")
+        _flag_label = {"A": "Actual", "B": "Budget", "V": "Variance", "V%": "Variance %", "E": "Encumbrance"}.get(actual_flag, actual_flag)
+        _budget_suffix = f" [{result['budget_name']}]" if result.get("budget_name") and actual_flag in ("B", "V", "V%") else ""
         ident = f"Account {result.get('account_number')}" if api_path == "/api/db/balance/by-account" else f"CCID {result.get('ccid')}"
-        return f"{ident} in {lbl} for {result.get('period_name')} ({bal_type}) — YTD: {cur(result.get('ytd_balance'))}, Period Activity: {cur(result.get('period_activity'))}."
+        _ytd_label = "YTD Var%" if actual_flag == "V%" else "YTD"
+        _act_label = "Period Var%" if actual_flag == "V%" else "Period Activity"
+        _fmt = (lambda v: f"{v:.2f}%") if actual_flag == "V%" else cur
+        return f"{ident} in {lbl} for {result.get('period_name')} ({_flag_label}{_budget_suffix}) — {_ytd_label}: {_fmt(result.get('ytd_balance'))}, {_act_label}: {_fmt(result.get('period_activity'))}."
+    if api_path == "/api/db/balance/multi-period":
+        ident = f"Account {result.get('account_number')}" if result.get("account_number") else f"CCID {result.get('ccid')}"
+        parts = [f"{p['period_name']}: YTD {cur(p.get('ytd_balance'))}, Activity {cur(p.get('period_activity'))}" for p in result.get("periods", [])]
+        return f"{ident} — " + " | ".join(parts) if parts else f"{ident} — no data."
     if api_path == "/api/db/balance/diff":
         ident = f"account {result['account_number']}" if result.get("account_number") else f"CCID {result['ccid']}"
         return f"For {ident}, YTD changed by {cur(result['ytd_delta'])} between {result['period_from']} and {result['period_to']}. Period activity changed by {cur(result['period_activity_delta'])}."

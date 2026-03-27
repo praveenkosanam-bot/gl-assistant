@@ -1,3 +1,4 @@
+from __future__ import annotations
 import os
 import re
 import random
@@ -27,6 +28,7 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 DEFAULT_LEDGER_NAME = os.getenv("DEFAULT_LEDGER_NAME", "US Primary Ledger")
 DEFAULT_LEDGER_ID = int(os.getenv("DEFAULT_LEDGER_ID", "300000046975971"))
 DEFAULT_CURRENCY_SYMBOL = os.getenv("DEFAULT_CURRENCY_SYMBOL", "$")
+DEFAULT_BUDGET_NAME = os.getenv("DEFAULT_BUDGET_NAME", "Budget")
 
 GLC_SOURCE_ID = int(os.getenv("GLC_SOURCE_ID", "0"))
 GLC_USER_ID = int(os.getenv("GLC_USER_ID", "0"))
@@ -202,6 +204,40 @@ def format_currency(amount: Any, currency_symbol: str = DEFAULT_CURRENCY_SYMBOL)
 def normalize_period(period_name: str | None) -> str | None:
     return period_name.upper() if period_name else None
 
+def expand_period_range(period_from: str, period_to: str) -> list[str]:
+    """Expand a period range (inclusive) into an ordered list of period names."""
+    REVERSE_MONTH_MAP = {v: k for k, v in MONTH_MAP.items()}
+
+    def parse(p: str):
+        p = p.strip().upper()
+        if re.fullmatch(r"\d{2}-\d{2}", p):
+            return 2000 + int(p[-2:]), int(p[:2]), "mm-yy"
+        m = re.fullmatch(r"([A-Z]{3})-(\d{2})", p)
+        if m:
+            return 2000 + int(m.group(2)), MONTH_MAP.get(m.group(1), 0), "mmm-yy"
+        return None, None, None
+
+    from_year, from_month, fmt = parse(period_from)
+    to_year, to_month, _ = parse(period_to)
+    if not from_year or not to_year or from_month == 0 or to_month == 0:
+        return [period_from, period_to]
+
+    periods: list[str] = []
+    y, mo = from_year, from_month
+    for _ in range(60):  # safety cap: max 5 years
+        if fmt == "mm-yy":
+            periods.append(f"{mo:02d}-{y % 100:02d}")
+        else:
+            periods.append(f"{REVERSE_MONTH_MAP.get(mo, str(mo))}-{y % 100:02d}")
+        if y == to_year and mo == to_month:
+            break
+        mo += 1
+        if mo > 12:
+            mo = 1
+            y += 1
+    return periods or [period_from, period_to]
+
+
 def period_sort_key(period_name: str) -> tuple[int, int, str]:
     text = period_name.strip().upper()
     if re.fullmatch(r"\d{2}-\d{2}", text):
@@ -245,6 +281,54 @@ def extract_filters(message: str) -> dict[str, Any]:
                 results["period_from"] = inline_periods[0].upper()
                 results["period_to"] = inline_periods[1].upper()
 
+    # Comma/and-separated period list: "01-23, 02-23, 03-23" or "01-23, 02-23, and 03-23"
+    if "period_from" not in results and "period_to" not in results:
+        csv_period_match = re.search(
+            r"\b([A-Z]{3}-\d{2}|\d{2}-\d{2})\b(?:\s*,\s*(?:and\s+)?\b(?:[A-Z]{3}-\d{2}|\d{2}-\d{2})\b)+",
+            upper_message,
+        )
+        if csv_period_match:
+            results["period_list"] = re.findall(r"\b(?:[A-Z]{3}-\d{2}|\d{2}-\d{2})\b", csv_period_match.group(0))
+
+    # Partial month names without year: "from Jan to Apr", "between March and June"
+    if "period_from" not in results and "period_to" not in results and "period_list" not in results:
+        _MONTH_NAME_RE = (
+            r"(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?"
+            r"|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)"
+        )
+        partial_range = re.search(
+            r"(?:from|between)\s+" + _MONTH_NAME_RE + r"\b.*?\b(?:to|and)\s+" + _MONTH_NAME_RE,
+            message, re.IGNORECASE,
+        )
+        if partial_range:
+            _MO_MAP = {
+                "jan": 1, "january": 1, "feb": 2, "february": 2, "mar": 3, "march": 3,
+                "apr": 4, "april": 4, "may": 5, "jun": 6, "june": 6, "jul": 7, "july": 7,
+                "aug": 8, "august": 8, "sep": 9, "september": 9, "oct": 10, "october": 10,
+                "nov": 11, "november": 11, "dec": 12, "december": 12,
+            }
+            from_mo = _MO_MAP.get(partial_range.group(1).lower())
+            to_mo = _MO_MAP.get(partial_range.group(2).lower())
+            if from_mo and to_mo:
+                _p_year = None
+                try:
+                    _seed = seed_lookup(
+                        account_number=results.get("account_number"),
+                        ccid=results.get("ccid"),
+                        ledger_id=results.get("ledger_id", DEFAULT_LEDGER_ID),
+                    )
+                    if _seed and _seed.get("period_name"):
+                        _ym = re.search(r"\d{2}$", _seed["period_name"])
+                        if _ym:
+                            _p_year = int(_ym.group())
+                except Exception:
+                    pass
+                if _p_year is None:
+                    import datetime as _dt
+                    _p_year = _dt.datetime.now().year % 100
+                results["period_from"] = f"{from_mo:02d}-{_p_year:02d}"
+                results["period_to"] = f"{to_mo:02d}-{_p_year:02d}"
+
     last_n_match = re.search(patterns["last_n"], message, re.IGNORECASE)
     if last_n_match:
         results["n"] = int(last_n_match.group(1))
@@ -284,9 +368,19 @@ def extract_filters(message: str) -> dict[str, Any]:
 
     lower_message = message.lower()
     if "actual_flag" not in results:
-        if re.search(r"\bactuals?\b", lower_message): results["actual_flag"] = "A"
-        elif re.search(r"\bbudget\b", lower_message): results["actual_flag"] = "B"
-        elif re.search(r"\bencumbrance\b", lower_message): results["actual_flag"] = "E"
+        if re.search(r"\bactuals?\b", lower_message):
+            results["actual_flag"] = "A"
+        elif re.search(r"\bvariance\s*%|\bvar\s*%|\bv%\b", lower_message):
+            results["actual_flag"] = "V%"
+            results.setdefault("budget_name", DEFAULT_BUDGET_NAME)
+        elif re.search(r"\bvariance\b", lower_message):
+            results["actual_flag"] = "V"
+            results.setdefault("budget_name", DEFAULT_BUDGET_NAME)
+        elif re.search(r"\bbudget\b", lower_message):
+            results["actual_flag"] = "B"
+            results.setdefault("budget_name", DEFAULT_BUDGET_NAME)
+        elif re.search(r"\bencumbrance\b", lower_message):
+            results["actual_flag"] = "E"
 
     if "entered_flag" not in results:
         if re.search(r"\bentered\b", lower_message):
@@ -316,6 +410,34 @@ def extract_filters(message: str) -> dict[str, Any]:
                         results.setdefault("n", 4)
         except Exception:
             pass
+
+    # Quarter notation: Q1/Q2/Q3/Q4
+    if "period_name" not in results and "period_from" not in results and "period_list" not in results:
+        _qm = re.search(r"\bQ([1-4])\b", message, re.IGNORECASE)
+        if _qm:
+            _q = int(_qm.group(1))
+            _first_mo = (_q - 1) * 3 + 1
+            _last_mo = _q * 3
+            _q_year = None
+            try:
+                _qseed = seed_lookup(
+                    account_number=results.get("account_number"),
+                    ccid=results.get("ccid"),
+                    ledger_id=results.get("ledger_id", DEFAULT_LEDGER_ID),
+                )
+                if _qseed and _qseed.get("period_name"):
+                    _qym = re.search(r"\d{2}$", _qseed["period_name"])
+                    if _qym:
+                        _q_year = int(_qym.group())
+            except Exception:
+                pass
+            if _q_year is None:
+                import datetime as _dt
+                _q_year = _dt.datetime.now().year % 100
+            results["period_from"] = f"{_first_mo:02d}-{_q_year:02d}"
+            results["period_to"] = f"{_last_mo:02d}-{_q_year:02d}"
+            results["period_list"] = [f"{_mo:02d}-{_q_year:02d}" for _mo in range(_first_mo, _last_mo + 1)]
+            results["quarter"] = f"Q{_q}"
 
     if "activity" in lower_message: results["sort_by"] = "activity"
     if "account_number" not in results:
@@ -361,6 +483,7 @@ def call_glc_balance(
     role_name: str | None = None,
     ledger_id: int | None = None,
     entered_flag: str = "A",
+    budget_name: str | None = None,
 ) -> tuple[float | None, str | None]:
     session_id = str(random.randint(1000000, 9999999))
     effective_coa_id = (get_coa_for_ledger(ledger_id) if ledger_id else None) or GLC_COA_ID
@@ -403,7 +526,7 @@ def call_glc_balance(
             p_entered_flag => :entered_flag,
             p_period_offset => NULL,
             p_encumbrance_name => NULL,
-            p_budget_name => NULL,
+            p_budget_name => :budget_name,
             p_gl_account_string => NULL,
             p_fields_tbl => l_fields,
             p_field_hier_tbl => l_hier,
@@ -445,6 +568,7 @@ def call_glc_balance(
                     "entered_flag": entered_flag,
                     "account_string": account_string,
                     "hierarchy_table": hierarchy_table,
+                    "budget_name": budget_name,
                     "out_bal": out_bal,
                     "out_msg": out_msg,
                 })
@@ -455,7 +579,7 @@ def call_glc_balance(
                     return float(val), out_msg.getvalue()
                 return None, out_msg.getvalue()
             except oracledb.OperationalError as e:
-                if "DPY-4011" in str(e) or "call timeout" in str(e).lower():
+                if "DPY-4011" in str(e) or "DPY-4024" in str(e) or "call timeout" in str(e).lower():
                     timeout_s = GLC_CALL_TIMEOUT_MS // 1000
                     print(f"[GLC] PL/SQL get_balance timed out after {timeout_s}s for account {account_string} — likely a large summary/parent account.")
                     return None, f"Balance query timed out after {timeout_s}s. Account {account_string} may be a parent/summary account with too many child accounts to roll up quickly."
